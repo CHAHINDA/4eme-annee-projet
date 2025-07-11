@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import logo from '../assets/marsa-port.jpg' // make sure it's in src/assets/
+import logo from '../assets/marsa-port.jpg'
 
 export default function Login() {
   const [fullname, setFullname] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -42,7 +43,6 @@ export default function Login() {
           align-items: center;
           justify-content: center;
           height: 70vh;
-          padding: 10px;
         }
 
         .logo-outer {
@@ -75,8 +75,7 @@ export default function Login() {
           backdrop-filter: blur(14px);
           border-radius: 20px;
           padding: 40px 30px;
-          width: 100%;
-          max-width: 400px;
+          width: 400px;
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
           text-align: center;
           color: #fff;
@@ -121,6 +120,21 @@ export default function Login() {
           fill: #004a99;
         }
 
+        .eye-icon {
+          position: absolute;
+          top: 50%;
+          right: 12px;
+          transform: translateY(-50%);
+          width: 24px;
+          height: 24px;
+          fill: #004a99;
+          cursor: pointer;
+        }
+
+        .eye-icon:hover {
+          fill: #00b4d8;
+        }
+
         button {
           position: relative;
           padding: 14px 24px;
@@ -149,40 +163,38 @@ export default function Login() {
           50% { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
         }
-
-        /* Responsive Adjustments */
-        @media (max-width: 480px) {
-          .login-wrapper {
-            height: 100vh;
-            padding: 20px;
-          }
-          .logo-outer {
-            width: 120px;
-            height: 120px;
-            margin-bottom: 20px;
-          }
-          .logo-outer img {
-            width: 110px;
-            height: 110px;
-          }
-          .login-box {
-            padding: 30px 20px;
-            max-width: 100%;
-            width: 100%;
-          }
-          .login-box h2 {
-            font-size: 1.5rem;
-            margin-bottom: 25px;
-          }
-          input {
-            font-size: 0.9rem;
-            padding: 12px 12px 12px 40px;
-          }
-          button {
-            font-size: 1rem;
-            padding: 12px 20px;
-          }
-        }
+            @media (max-width: 480px) {
+    .login-wrapper {
+      height: 100vh;
+      padding: 20px;
+    }
+    .logo-outer {
+      width: 120px;
+      height: 120px;
+      margin-bottom: 20px;
+    }
+    .logo-outer img {
+      width: 110px;
+      height: 110px;
+    }
+    .login-box {
+      padding: 30px 20px;
+      max-width: 100%;
+      width: 100%;
+    }
+    .login-box h2 {
+      font-size: 1.5rem;
+      margin-bottom: 25px;
+    }
+    input {
+      font-size: 0.9rem;
+      padding: 12px 12px 12px 40px;
+    }
+    button {
+      font-size: 1rem;
+      padding: 12px 20px;
+    }
+  }
       `}</style>
 
       <div className="login-wrapper">
@@ -205,9 +217,10 @@ export default function Login() {
                 <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
               </svg>
             </div>
+
             <div className="input-group">
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 placeholder="Mot de passe"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -216,7 +229,19 @@ export default function Login() {
               <svg className="input-icon" viewBox="0 0 24 24">
                 <path d="M12 17a2 2 0 0 0 2-2v-2a2 2 0 0 0-4 0v2a2 2 0 0 0 2 2zm6-7h-1V7a5 5 0 0 0-10 0v3H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zM9 7a3 3 0 0 1 6 0v3H9V7z" />
               </svg>
+              <svg
+                onClick={() => setShowPassword(!showPassword)}
+                className="eye-icon"
+                viewBox="0 0 24 24"
+              >
+                {showPassword ? (
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12zm11 4a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+                ) : (
+                  <path d="M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10z" />
+                )}
+              </svg>
             </div>
+
             <button type="submit">Se connecter</button>
           </form>
         </div>

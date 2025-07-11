@@ -187,6 +187,12 @@ export default function HomePage({ username = 'Utilisateur', onLogout }) {
               ))}
             </div>
           )}
+
+          {/* ✅ Historique Button */}
+          <button className="btn" onClick={() => navigate('/historique')}>
+            Historique des demandes
+          </button>
+          <div className="helper-text">Consultez et imprimez vos anciennes demandes.</div>
         </div>
       </div>
     </>
