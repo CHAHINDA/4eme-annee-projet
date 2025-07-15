@@ -1,14 +1,19 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom' // <-- ADD THIS
 import logo from '../assets/marsa-port.jpg'
 
 export default function Login() {
   const [fullname, setFullname] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const navigate = useNavigate() // <-- INITIALIZE NAVIGATE
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    alert(`Connexion avec\nNom complet: ${fullname}\nMot de passe: ${password}`)
+    // You can remove this alert later
+    // alert(`Connexion avec\nNom complet: ${fullname}\nMot de passe: ${password}`)
+
+    navigate('/home') // <-- REDIRECT TO /home
   }
 
   return (
@@ -197,7 +202,7 @@ export default function Login() {
   }
       `}</style>
 
-      <div className="login-wrapper">
+        <div className="login-wrapper">
         <div className="logo-outer">
           <img src={logo} alt="Marsa Maroc" />
         </div>
