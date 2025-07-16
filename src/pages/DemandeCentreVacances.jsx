@@ -2,22 +2,20 @@ import { useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
 import logo from '../assets/marsa-port.jpg'
-import html2canvas from 'html2canvas';
-
+import html2canvas from 'html2canvas'
 
 export default function DemandeCentreVacances() {
   const location = useLocation()
   const navigate = useNavigate()
   const { type, month } = location.state || {}
-  const [saved, setSaved] = useState(false)  // track if saved
+  const [saved, setSaved] = useState(false)
 
-  // Form data state (all fields you have in form)
   const [formData, setFormData] = useState({
     nom: '',
     numSerie: '',
     direction: '',
     dateAffectation: '',
-    position: '', // radio value
+    position: '',
     situationFamiliale: '',
     nombreEnfants: '',
     telephone: '',
@@ -34,59 +32,90 @@ export default function DemandeCentreVacances() {
 
   const demandeType = type === 'campagne' && month ? month : 'Normal'
   const documentCode = ['E', 'N', 'D', 'C', 'V', 'G', 'E', 'G', 'R', 'H', 'S', '1', '1']
-
-  // State to toggle visibility of 2nd and 3rd choices
   const [showSecondChoice, setShowSecondChoice] = useState(false)
   const [showThirdChoice, setShowThirdChoice] = useState(false)
 
-  // Handle input changes, works for text and date inputs
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target
+  const formRef = useRef(null)
 
+  const handleChange = (e) => {
+    const { name, value, type } = e.target
     if (type === 'radio') {
-      setFormData(prev => ({ ...prev, position: value }))
+      setFormData((prev) => ({ ...prev, position: value }))
     } else {
-      setFormData(prev => ({ ...prev, [name]: value }))
+      setFormData((prev) => ({ ...prev, [name]: value }))
     }
   }
 
-   const formRef = useRef(null)  // Ref to the form container to capture
-
   const handleEnregistrer = () => {
-    // For now, just toggle saved to true (simulate saving)
     setSaved(true)
     alert('Form saved (frontend only)')
   }
 
+  const cloneAndPrepareForPdf = () => {
+    const original = formRef.current
+    if (!original) return null
+
+    const clone = original.cloneNode(true)
+    clone.style.position = 'fixed'
+    clone.style.top = '-9999px'
+    clone.style.left = '0'
+    clone.style.width = '300mm'
+    clone.style.minHeight = '297mm'
+    clone.style.padding = '0.5cm 0cm 5cm 0cm'
+
+    document.body.appendChild(clone)
+    return clone
+  }
+
   const handleImprimer = async () => {
-    if (!formRef.current) return
-     // Hide all elements with class 'no-print'
-  const elementsToHide = document.querySelectorAll('.no-print');
-  elementsToHide.forEach(el => el.style.display = 'none');
+    const hiddenContainer = cloneAndPrepareForPdf()
+    if (!hiddenContainer) return
+
+    const elementsToHide = document.querySelectorAll('.no-print')
+    elementsToHide.forEach((el) => (el.style.display = 'none'))
+
     try {
-      // Take screenshot of form container
-      const canvas = await html2canvas(formRef.current, {
-        scale: 2,  // Increase resolution for better quality
-        useCORS: true, // if you have cross-origin images (like logos)
+      const canvas = await html2canvas(hiddenContainer, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
       })
+
       const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
-      // Create PDF and add image
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'px',
-        format: [canvas.width, canvas.height],
-      })
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height)
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
 
-      // Save the PDF
+      const pxToMm = (px) => px * 0.264583
+      const imgWidthMM = pxToMm(canvas.width)
+      const imgHeightMM = pxToMm(canvas.height)
+      const imgRatio = imgWidthMM / imgHeightMM
+
+      let finalWidth = pageWidth
+      let finalHeight = finalWidth / imgRatio
+
+      if (finalHeight > pageHeight) {
+        finalHeight = pageHeight
+        finalWidth = finalHeight * imgRatio
+      }
+
+      const x = (pageWidth - finalWidth) / 2
+      const y = (pageHeight - finalHeight) / 2
+
+      pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight)
       pdf.save('demande.pdf')
-    } catch (error) {
-      console.error('Error generating PDF', error)
+    } catch (err) {
+      console.error('Error generating PDF:', err)
+    } finally {
+      elementsToHide.forEach((el) => (el.style.display = ''))
+      document.body.removeChild(hiddenContainer)
     }
   }
 
   return (
+    // ... your JSX continues here
+
     <>
  <style>{`
   .return-wrapper {
@@ -337,9 +366,17 @@ export default function DemandeCentreVacances() {
   .add-choice-btn:hover {
     background-color: #e6f0ff;
   }
-`}</style>
+    @media print {
+  .no-print {
+    display: none !important;
+  }
+}
 
-  <div ref={formRef}>
+`}</style>
+<div
+  ref={formRef}
+>
+
     <div className="return-wrapper no-print">
         <button className="return-btn" onClick={() => navigate('/home')}>
           ← Retour à l'accueil
