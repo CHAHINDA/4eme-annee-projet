@@ -3,124 +3,196 @@ import { useNavigate } from 'react-router-dom'
 export default function Historique() {
   const navigate = useNavigate()
 
-  const handlePrint = (demande) => {
-    // For now just alert, later replace with real print logic
-    alert(`Impression de la demande: ${demande.type} du ${demande.date}`)
-  }
+  const demandes = [] // your data here
 
-  // Empty array for now, no demandes
-  const demandes = []
+  const handleVoirPlus = (demandeId = null) => {
+    if (demandeId) {
+      navigate(`/demande/${demandeId}`)
+    } else {
+      alert('Aucune demande à afficher.')
+    }
+  }
 
   return (
     <>
       <style>{`
-        .container {
-          max-width: 900px;
-          margin: 30px auto;
-          padding: 20px;
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+
+        * {
+          box-sizing: border-box;
         }
+
+        body, html, #root {
+          height: 100%;
+          margin: 0;
+          font-family: 'Inter', sans-serif;
+          background: #f5f7fa;
+          color: #1e293b;
+        }
+
+        .container {
+          max-width: 960px;
+          margin: 3rem auto;
+          padding: 1.5rem 2rem;
+          background: white;
+          border-radius: 16px;
+          box-shadow: 0 16px 40px rgb(0 0 128 / 0.1);
+          transition: box-shadow 0.3s ease;
+        }
+        .container:hover {
+          box-shadow: 0 20px 60px rgb(0 0 180 / 0.15);
+        }
+
         .return-btn {
-          background: #007acc;
+          background: #2563eb; /* blue-600 */
           color: white;
           border: none;
-          padding: 10px 16px;
-          border-radius: 8px;
+          padding: 0.75rem 1.5rem;
+          border-radius: 12px;
           font-weight: 600;
           cursor: pointer;
-          margin-bottom: 20px;
-          transition: background 0.3s ease;
+          font-size: 1rem;
+          box-shadow: 0 6px 12px rgb(37 99 235 / 0.4);
+          transition: background-color 0.3s ease, box-shadow 0.3s ease;
+          margin-bottom: 2rem;
         }
         .return-btn:hover {
-          background: #005fa3;
+          background: #1e40af; /* blue-800 */
+          box-shadow: 0 10px 20px rgb(30 64 175 / 0.6);
         }
+
         h1 {
-          color: #005fa3;
-          margin-bottom: 20px;
           text-align: center;
+          font-weight: 700;
+          font-size: 2.25rem;
+          margin-bottom: 2.5rem;
+          color: #334155;
         }
+
         table {
           width: 100%;
-          border-collapse: collapse;
-          min-width: 600px;
+          border-collapse: separate;
+          border-spacing: 0 0.75rem;
         }
+
         thead tr {
-          background-color: #007acc;
-          color: white;
+          background: transparent;
+        }
+
+        thead th {
           text-align: left;
-        }
-        th, td {
-          padding: 12px 15px;
-          border: 1.5px solid #007acc;
-        }
-        tbody tr:nth-child(even) {
-          background-color: #f3f9ff;
-        }
-        .print-btn {
-          background: #28a745;
-          border: none;
-          padding: 6px 12px;
-          color: white;
-          border-radius: 6px;
           font-weight: 600;
+          font-size: 1.1rem;
+          padding-left: 1rem;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          user-select: none;
+        }
+
+        tbody tr {
+          background: #f9fafb;
+          box-shadow: 0 1px 3px rgb(0 0 128 / 0.1);
+          border-radius: 12px;
+          transition: transform 0.25s ease, box-shadow 0.25s ease;
           cursor: pointer;
-          display: flex;
+        }
+        tbody tr:hover {
+          background: #dbeafe; /* blue-100 */
+          transform: translateY(-3px);
+          box-shadow: 0 6px 15px rgb(37 99 235 / 0.3);
+        }
+
+        td {
+          padding: 1rem;
+          vertical-align: middle;
+          font-size: 1rem;
+          color: #334155;
+        }
+        td:first-child {
+          padding-left: 1.5rem;
+          font-weight: 600;
+        }
+
+        .no-data {
+          text-align: center;
+          font-style: italic;
+          color: #94a3b8;
+          padding: 2rem 0;
+          font-size: 1.1rem;
+        }
+
+        .voir-plus-btn {
+          background: linear-gradient(135deg, #3b82f6, #60a5fa); /* blue-500 to blue-400 */
+          border: none;
+          color: white;
+          padding: 0.55rem 1.4rem;
+          border-radius: 9999px;
+          font-weight: 600;
+          font-size: 0.95rem;
+          cursor: pointer;
+          box-shadow: 0 4px 12px rgb(59 130 246 / 0.6);
+          transition: transform 0.2s ease, box-shadow 0.3s ease;
+          display: inline-flex;
           align-items: center;
           gap: 6px;
-          transition: background 0.3s ease;
         }
-        .print-btn:hover {
-          background: #1e7e34;
-        }
-        .print-icon {
-          font-size: 1.1rem;
-        }
-        .empty-msg {
-          text-align: center;
-          color: #888;
-          margin-top: 40px;
-          font-size: 1.1rem;
-          font-style: italic;
+        .voir-plus-btn:hover {
+          transform: scale(1.1);
+          box-shadow: 0 6px 18px rgb(59 130 246 / 0.8);
         }
       `}</style>
 
-      <div className="container">
+      <div className="container" role="main">
         <button className="return-btn" onClick={() => navigate('/home')}>
           ← Retour à l'accueil
         </button>
 
         <h1>Historique des demandes</h1>
 
-        {demandes.length === 0 ? (
-          <p className="empty-msg">Aucune demande trouvée.</p>
-        ) : (
-          <table>
-            <thead>
+        <table aria-label="Historique des demandes">
+          <thead>
+            <tr>
+              <th scope="col">Demande</th>
+              <th scope="col">Date</th>
+              <th scope="col">Détails</th>
+            </tr>
+          </thead>
+          <tbody>
+            {demandes.length === 0 ? (
               <tr>
-                <th>Demande</th>
-                <th>Date</th>
-                <th>Imprimer</th>
+                <td className="no-data" colSpan="2">
+                  Aucune demande trouvée
+                </td>
+                <td>
+                  <button
+                    className="voir-plus-btn"
+                    onClick={() => alert('Aucune demande à afficher')}
+                    aria-label="Voir plus, aucune demande disponible"
+                  >
+                    Voir plus
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {demandes.map(demande => (
-                <tr key={demande.id}>
+            ) : (
+              demandes.map((demande) => (
+                <tr key={demande.id} tabIndex={0}>
                   <td>{demande.type}</td>
                   <td>{new Date(demande.date).toLocaleDateString('fr-FR')}</td>
                   <td>
                     <button
-                      className="print-btn"
-                      onClick={() => handlePrint(demande)}
-                      aria-label={`Imprimer la demande ${demande.type}`}
+                      className="voir-plus-btn"
+                      onClick={() => navigate(`/demande/${demande.id}`)}
+                      aria-label={`Voir plus sur la demande ${demande.type}`}
                     >
-                      🖨️ Imprimer
+                      Voir plus
                     </button>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </>
   )

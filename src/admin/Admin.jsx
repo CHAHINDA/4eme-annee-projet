@@ -380,7 +380,7 @@ useEffect(() => {
         </li>
         <li>
           <button onClick={() => navigate('/admin/demandes/beneficiaires')}>
-            <span className="icon">👥</span>
+            <span className="icon">🤝</span>
             <span className="text">Liste des bénéficiaires</span>
           </button>
         </li>
@@ -391,7 +391,7 @@ useEffect(() => {
         <li>
           <button onClick={() => navigate('/admin/settings')}>
             <span className="icon">⚙️</span>
-            <span className="text">Compte administrateur</span>
+            <span className="text">Parametre</span>
           </button>
         </li>
       </ul>
@@ -423,7 +423,7 @@ useEffect(() => {
       </li>
       <li>
         <button onClick={() => navigate('/admin/demandes/beneficiaires')} aria-label="Liste des bénéficiaires">
-          <span className="icon">👥</span>
+          <span className="icon">🤝</span>
         </button>
       </li>
       <li>

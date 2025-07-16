@@ -1,13 +1,36 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { jsPDF } from 'jspdf'
 import logo from '../assets/marsa-port.jpg'
+import html2canvas from 'html2canvas';
+
 
 export default function DemandeCentreVacances() {
   const location = useLocation()
   const navigate = useNavigate()
   const { type, month } = location.state || {}
-  const [showMessage, setShowMessage] = useState(false)
+  const [saved, setSaved] = useState(false)  // track if saved
 
+  // Form data state (all fields you have in form)
+  const [formData, setFormData] = useState({
+    nom: '',
+    numSerie: '',
+    direction: '',
+    dateAffectation: '',
+    position: '', // radio value
+    situationFamiliale: '',
+    nombreEnfants: '',
+    telephone: '',
+    premierChoix: '',
+    deuxiemeChoix: '',
+    troisiemeChoix: '',
+    periodePremierDebut: '',
+    periodePremierFin: '',
+    periodeDeuxiemeDebut: '',
+    periodeDeuxiemeFin: '',
+    periodeTroisiemeDebut: '',
+    periodeTroisiemeFin: '',
+  })
 
   const demandeType = type === 'campagne' && month ? month : 'Normal'
   const documentCode = ['E', 'N', 'D', 'C', 'V', 'G', 'E', 'G', 'R', 'H', 'S', '1', '1']
@@ -15,6 +38,53 @@ export default function DemandeCentreVacances() {
   // State to toggle visibility of 2nd and 3rd choices
   const [showSecondChoice, setShowSecondChoice] = useState(false)
   const [showThirdChoice, setShowThirdChoice] = useState(false)
+
+  // Handle input changes, works for text and date inputs
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target
+
+    if (type === 'radio') {
+      setFormData(prev => ({ ...prev, position: value }))
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }))
+    }
+  }
+
+   const formRef = useRef(null)  // Ref to the form container to capture
+
+  const handleEnregistrer = () => {
+    // For now, just toggle saved to true (simulate saving)
+    setSaved(true)
+    alert('Form saved (frontend only)')
+  }
+
+  const handleImprimer = async () => {
+    if (!formRef.current) return
+     // Hide all elements with class 'no-print'
+  const elementsToHide = document.querySelectorAll('.no-print');
+  elementsToHide.forEach(el => el.style.display = 'none');
+    try {
+      // Take screenshot of form container
+      const canvas = await html2canvas(formRef.current, {
+        scale: 2,  // Increase resolution for better quality
+        useCORS: true, // if you have cross-origin images (like logos)
+      })
+      const imgData = canvas.toDataURL('image/png')
+
+      // Create PDF and add image
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height],
+      })
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height)
+
+      // Save the PDF
+      pdf.save('demande.pdf')
+    } catch (error) {
+      console.error('Error generating PDF', error)
+    }
+  }
 
   return (
     <>
@@ -269,8 +339,8 @@ export default function DemandeCentreVacances() {
   }
 `}</style>
 
-
-      <div className="return-wrapper">
+  <div ref={formRef}>
+    <div className="return-wrapper no-print">
         <button className="return-btn" onClick={() => navigate('/home')}>
           ← Retour à l'accueil
         </button>
@@ -480,23 +550,48 @@ export default function DemandeCentreVacances() {
   </p>
 </div>
         </div>
-      <div style={{ textAlign: 'center', marginTop: '30px' }}>
-  <button
-    onClick={() => navigate('/home')}
-    style={{
-      backgroundColor: '#007acc',
-      color: 'white',
-      padding: '12px 24px',
-      borderRadius: '8px',
-      border: 'none',
-      fontSize: '1rem',
-      fontWeight: '600',
-      cursor: 'pointer',
-    }}
-  >
-    Enregistrer
-  </button>
-</div>
+        </div>
+      <div className="no-print" style={{ textAlign: 'center', marginTop: '30px' }}>
+        {!saved ? (
+          <button
+            onClick={() => setSaved(true)}
+            style={{
+              backgroundColor: '#007acc',
+              color: 'white',
+              padding: '12px 24px',
+              borderRadius: '8px',
+              border: 'none',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'background-color 0.3s ease',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#005fa3')}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#007acc')}
+          >
+            Enregistrer
+          </button>
+        ) : (
+          <button
+            onClick={handleImprimer}
+            style={{
+              backgroundColor: '#dc2626', // Tailwind red-600
+              color: 'white',
+              padding: '12px 24px',
+              borderRadius: '8px',
+              border: 'none',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'background-color 0.3s ease',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#b91c1c')}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#dc2626')}
+          >
+            Imprimer
+          </button>
+        )}
+      </div>
 
       </div>
     </>
