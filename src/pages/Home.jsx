@@ -1,18 +1,33 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import logo from '../assets/marsa-port.jpg'
 
 export default function HomePage({ username = 'Utilisateur', onLogout }) {
   const [showMonths, setShowMonths] = useState(false)
+  const [campaigns, setCampaigns] = useState([])
   const navigate = useNavigate()
 
-  const months = [
-    { key: 'octobre', label: 'Octobre' },
-    { key: 'decembre', label: 'Décembre' },
-    { key: 'fevrier', label: 'Février' },
-    { key: 'avril', label: 'Avril' },
-    { key: 'ete', label: 'Été' },
-  ]
+  // Fetch campaigns on load
+  useEffect(() => {
+  const fetchCampaigns = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/periods')
+      const now = new Date()
+
+      const activeCampaigns = res.data.filter(({ startDate, endDate }) => {
+        const end = new Date(endDate)
+        return end >= now
+      })
+
+      setCampaigns(activeCampaigns)
+    } catch (err) {
+      console.error('Failed to fetch campaigns:', err)
+    }
+  }
+
+  fetchCampaigns()
+}, [])
 
   const handleNormalClick = () => {
     setShowMonths(false)
@@ -23,8 +38,8 @@ export default function HomePage({ username = 'Utilisateur', onLogout }) {
     setShowMonths(prev => !prev)
   }
 
-  const handleMonthSelect = (monthKey) => {
-    navigate('/demande', { state: { type: 'campagne', month: monthKey } })
+  const handleCampaignSelect = (campaign) => {
+    navigate('/demande', { state: { type: 'campagne', campaign } })
   }
 
   const handleLogout = () => {
@@ -201,7 +216,7 @@ export default function HomePage({ username = 'Utilisateur', onLogout }) {
         }
       `}</style>
 
-      <div className="container">
+     <div className="container">
         <button className="logout" onClick={handleLogout}>Déconnexion</button>
         <div className="card">
           <img src={logo} alt="Logo" className="logo" />
@@ -211,25 +226,46 @@ export default function HomePage({ username = 'Utilisateur', onLogout }) {
             Demande Normal
           </button>
           <div className="helper-text">Pour faire une demande à n'importe quel moment.</div>
+<button className="btn" onClick={handleCompagneClick}>
+  {showMonths ? 'Fermer les campagnes' : 'Demande Campagne'}
+</button>
+<div className="helper-text">Pour les périodes de vacances scolaires.</div>
 
-          <button className="btn" onClick={handleCompagneClick}>
-            {showMonths ? 'Fermer les mois' : 'Demande Campagne'}
-          </button>
-          <div className="helper-text">Pour les périodes de vacances scolaires.</div>
+{showMonths && (
+  <div className="month-list">
+    {campaigns.length === 0 ? (
+      <p>Aucune campagne active actuellement.</p>
+    ) : (
+      campaigns.map(campaign => {
+        const start = new Date(campaign.startDate).toLocaleDateString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
+        const end = new Date(campaign.endDate).toLocaleDateString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
 
-          {showMonths && (
-            <div className="month-list">
-              {months.map(({ key, label }) => (
-                <button
-                  key={key}
-                  className="month-btn"
-                  onClick={() => handleMonthSelect(key)}
-                >
-                  {label}
-                </button>
-              ))}
+        return (
+          <button
+            key={campaign.id}
+            className="month-btn"
+            onClick={() => handleCampaignSelect(campaign)}
+            style={{ textAlign: 'left', padding: '10px 12px' }}
+          >
+            <div style={{ fontWeight: '700' }}>{campaign.name}</div>
+            <div style={{ fontSize: '0.70rem', color: '#555' }}>
+              Du {start} au {end}
             </div>
-          )}
+          </button>
+        )
+      })
+    )}
+  </div>
+)}
+
 
           <button className="btn" onClick={() => navigate('/historique')}>
             Historique des demandes

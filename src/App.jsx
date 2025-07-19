@@ -11,6 +11,8 @@ import DemandeSejour from './admin/DemandeSejour'         // Demande des séjour
 import AffectationHistorique from './admin/AffectationHistorique' // État d'historique d'affectation
 import BeneficiairesList from './admin/BeneficiairesList' // Liste des bénéficiaires
 import AdminSettings from './admin/AdminSettings'         // Paramètre compte admin
+import DatesSettings from './admin/Dates'  // adjust the path if needed
+
 
 function App() {
   return (
@@ -35,6 +37,8 @@ function App() {
 
         {/* Paramètre */}
         <Route path="/admin/settings" element={<AdminSettings />} />
+        <Route path="/admin/dates" element={<DatesSettings />} />
+
       </Routes>
     </div>
   )

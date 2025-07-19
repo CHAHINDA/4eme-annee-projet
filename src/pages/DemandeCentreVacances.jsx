@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
 import logo from '../assets/marsa-port.jpg'
@@ -7,8 +8,10 @@ import html2canvas from 'html2canvas'
 export default function DemandeCentreVacances() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { type, month } = location.state || {}
+  const { type, campaign } = location.state || {}  // <-- changed here
+
   const [saved, setSaved] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const [formData, setFormData] = useState({
     nom: '',
@@ -30,21 +33,27 @@ export default function DemandeCentreVacances() {
     periodeTroisiemeFin: '',
   })
 
-  const demandeType = type === 'campagne' && month ? month : 'Normal'
+  // Use campaign.name if campaign exists, else 'Normal'
+  const demandeType = type === 'campagne' && campaign ? campaign.name : 'Normal'
+
   const documentCode = ['E', 'N', 'D', 'C', 'V', 'G', 'E', 'G', 'R', 'H', 'S', '1', '1']
   const [showSecondChoice, setShowSecondChoice] = useState(false)
   const [showThirdChoice, setShowThirdChoice] = useState(false)
 
   const formRef = useRef(null)
 
-  const handleChange = (e) => {
-    const { name, value, type } = e.target
-    if (type === 'radio') {
-      setFormData((prev) => ({ ...prev, position: value }))
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }))
+const handleChange = (e) => {
+  const { name, value, type: inputType } = e.target
+  if (inputType === 'radio') {
+    setFormData((prev) => ({ ...prev, position: value }))
+  } else {
+    setFormData((prev) => ({ ...prev, [name]: value }))
+    if (name.includes('Debut') || name.includes('Fin')) {
+      validateDate(value)
     }
   }
+}
+
 
   const handleEnregistrer = () => {
     setSaved(true)
@@ -68,53 +77,104 @@ export default function DemandeCentreVacances() {
   }
 
   const handleImprimer = async () => {
-    const hiddenContainer = cloneAndPrepareForPdf()
-    if (!hiddenContainer) return
+    setIsPrinting(true);
 
-    const elementsToHide = document.querySelectorAll('.no-print')
-    elementsToHide.forEach((el) => (el.style.display = 'none'))
+    const hiddenContainer = cloneAndPrepareForPdf();
+    if (!hiddenContainer) {
+      setIsPrinting(false);
+      return;
+    }
+
+    const elementsToHide = document.querySelectorAll('.no-print');
+    elementsToHide.forEach(el => (el.style.display = 'none'));
+
+    const hiddenElements = document.querySelectorAll('.only-pdf, .only-print');
+    hiddenElements.forEach(el => el.classList.add('show-for-pdf'));
 
     try {
       const canvas = await html2canvas(hiddenContainer, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
-      })
+      });
 
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-      const pageWidth = pdf.internal.pageSize.getWidth()
-      const pageHeight = pdf.internal.pageSize.getHeight()
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
 
-      const pxToMm = (px) => px * 0.264583
-      const imgWidthMM = pxToMm(canvas.width)
-      const imgHeightMM = pxToMm(canvas.height)
-      const imgRatio = imgWidthMM / imgHeightMM
+      const pxToMm = (px) => px * 0.264583;
+      const imgWidthMM = pxToMm(canvas.width);
+      const imgHeightMM = pxToMm(canvas.height);
+      const imgRatio = imgWidthMM / imgHeightMM;
 
-      let finalWidth = pageWidth
-      let finalHeight = finalWidth / imgRatio
+      let finalWidth = pageWidth;
+      let finalHeight = finalWidth / imgRatio;
 
       if (finalHeight > pageHeight) {
-        finalHeight = pageHeight
-        finalWidth = finalHeight * imgRatio
+        finalHeight = pageHeight;
+        finalWidth = finalHeight * imgRatio;
       }
 
-      const x = (pageWidth - finalWidth) / 2
-      const y = (pageHeight - finalHeight) / 2
+      const x = (pageWidth - finalWidth) / 2;
+      const y = (pageHeight - finalHeight) / 2;
 
-      pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight)
-      pdf.save('demande.pdf')
+      pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
+      pdf.save('demande.pdf');
     } catch (err) {
-      console.error('Error generating PDF:', err)
+      console.error('Error generating PDF:', err);
     } finally {
-      elementsToHide.forEach((el) => (el.style.display = ''))
-      document.body.removeChild(hiddenContainer)
+      elementsToHide.forEach(el => (el.style.display = ''));
+      hiddenElements.forEach(el => el.classList.remove('show-for-pdf'));
+      document.body.removeChild(hiddenContainer);
+      setIsPrinting(false);
     }
+  };
+  const [allCampaigns, setAllCampaigns] = useState([])
+
+useEffect(() => {
+  fetch('http://localhost:5000/api/periods')
+    .then(res => res.json())
+    .then(data => setAllCampaigns(data))
+    .catch(err => console.error('Erreur de chargement des périodes:', err))
+}, [])
+const validateDate = (dateStr) => {
+  const selected = new Date(dateStr);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (selected < today) {
+    alert('❌ Cette date est déjà passée.');
+    navigate('/home');  // Redirect after alert
+    return false;
   }
 
+  const matched = allCampaigns.find(({ startDate, endDate }) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return selected >= start && selected <= end;
+  });
+
+  if (!matched) {
+    alert('❌ Vous devez aller à la section normale pour cette période.');
+    navigate('/home');  // Redirect after alert
+    return false;
+  }
+
+  if (matched.name !== (campaign?.name || 'Normal')) {
+    alert(`❌ Cette date correspond à ${matched.name}. Veuillez changer de section.`);
+    navigate('/home');  // Redirect after alert
+    return false;
+  }
+
+  return true;
+};
+
+
+
   return (
-    // ... your JSX continues here
+    
 
     <>
  <style>{`
@@ -371,6 +431,22 @@ export default function DemandeCentreVacances() {
     display: none !important;
   }
 }
+  .only-pdf,
+.only-print {
+  display: none;
+}
+
+@media print {
+  .only-pdf,
+  .only-print {
+    display: block !important;
+  }
+}
+
+.show-for-pdf {
+  display: block !important;
+}
+
 
 `}</style>
 <div
@@ -405,7 +481,7 @@ export default function DemandeCentreVacances() {
         <div className="form-long-cadre">
 
           {/* Box 1 */}
-          <div className="form-box">
+          <div className="form-box only-print">
             <div className="form-title">Informations sur le (la) bénéficiaire :</div>
 
             <div className="form-row">
@@ -472,97 +548,138 @@ export default function DemandeCentreVacances() {
           </div>
 
             {/* Box 2 with modified table */}
-          <div className="form-box">
-            <div className="form-title">Choix du centre de vacances</div>
-
-            <table>
-              <thead>
-                <tr>
-                  <th>Choix du centre de vacances</th>
-                  <th>
-                    Premier choix (obligatoire)
-                    {!showSecondChoice && (
-                      <span
-                        className="add-choice-btn"
-                        title="Ajouter deuxième choix"
-                        onClick={() => setShowSecondChoice(true)}
-                      >
-                        +
-                      </span>
-                    )}
-                  </th>
-                  {showSecondChoice && (
-                    <th>
-                      Deuxième choix (facultatif)
-                      {!showThirdChoice && (
-                        <span
-                          className="add-choice-btn"
-                          title="Ajouter troisième choix"
-                          onClick={() => setShowThirdChoice(true)}
-                        >
-                          +
-                        </span>
-                      )}
-                    </th>
-                  )}
-                  {showThirdChoice && <th>Troisième choix (facultatif)</th>}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Centre demandé</td>
-                  <td>
-                    <input
-                      className="table-input"
-                      type="text"
-                      required
-                      placeholder="Obligatoire"
-                      name="premierChoix"
-                    />
-                  </td>
-                  {showSecondChoice && (
-                    <td>
-                      <input className="table-input" type="text" name="deuxiemeChoix" />
-                    </td>
-                  )}
-                  {showThirdChoice && (
-                    <td>
-                      <input className="table-input" type="text" name="troisiemeChoix" />
-                    </td>
-                  )}
-                </tr>
-                <tr>
-                  <td>Période demandée (date de sortie non incluse)</td>
-                  <td>
-                    <div className="date-range">
-                      <input type="date" name="periodePremierDebut" />
-                      <span>au</span>
-                      <input type="date" name="periodePremierFin" />
-                    </div>
-                  </td>
-                  {showSecondChoice && (
-                    <td>
-                      <div className="date-range">
-                        <input type="date" name="periodeDeuxiemeDebut" />
-                        <span>au</span>
-                        <input type="date" name="periodeDeuxiemeFin" />
-                      </div>
-                    </td>
-                  )}
-                  {showThirdChoice && (
-                    <td>
-                      <div className="date-range">
-                        <input type="date" name="periodeTroisiemeDebut" />
-                        <span>au</span>
-                        <input type="date" name="periodeTroisiemeFin" />
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              </tbody>
-            </table>
+        <table>
+  <thead>
+    <tr>
+      <th>Choix du centre de vacances</th>
+      <th>
+        Premier choix (obligatoire)
+        {!showSecondChoice && (
+          <span
+            className="add-choice-btn"
+            title="Ajouter deuxième choix"
+            onClick={() => setShowSecondChoice(true)}
+          >
+            +
+          </span>
+        )}
+      </th>
+      {showSecondChoice && (
+        <th>
+          Deuxième choix (facultatif)
+          {!showThirdChoice && (
+            <span
+              className="add-choice-btn"
+              title="Ajouter troisième choix"
+              onClick={() => setShowThirdChoice(true)}
+            >
+              +
+            </span>
+          )}
+        </th>
+      )}
+      {showThirdChoice && <th>Troisième choix (facultatif)</th>}
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Centre demandé</td>
+      <td>
+        <input
+          className="table-input"
+          type="text"
+          required
+          placeholder="Obligatoire"
+          name="premierChoix"
+          value={formData.premierChoix}
+          onChange={handleChange}
+        />
+      </td>
+      {showSecondChoice && (
+        <td>
+          <input
+            className="table-input"
+            type="text"
+            name="deuxiemeChoix"
+            value={formData.deuxiemeChoix}
+            onChange={handleChange}
+          />
+        </td>
+      )}
+      {showThirdChoice && (
+        <td>
+          <input
+            className="table-input"
+            type="text"
+            name="troisiemeChoix"
+            value={formData.troisiemeChoix}
+            onChange={handleChange}
+          />
+        </td>
+      )}
+    </tr>
+    <tr>
+      <td>Période demandée (date de sortie non incluse)</td>
+      <td>
+        <div className="date-range">
+          <input
+            type="date"
+            name="periodePremierDebut"
+            value={formData.periodePremierDebut}
+            onChange={handleChange}
+          />
+          <span>au</span>
+          <input
+            type="date"
+            name="periodePremierFin"
+            value={formData.periodePremierFin}
+            onChange={handleChange}
+          />
+        </div>
+      </td>
+      {showSecondChoice && (
+        <td>
+          <div className="date-range">
+            <input
+              type="date"
+              name="periodeDeuxiemeDebut"
+              value={formData.periodeDeuxiemeDebut}
+              onChange={handleChange}
+            />
+            <span>au</span>
+            <input
+              type="date"
+              name="periodeDeuxiemeFin"
+              value={formData.periodeDeuxiemeFin}
+              onChange={handleChange}
+            />
           </div>
-          <div className="form-box">
+        </td>
+      )}
+      {showThirdChoice && (
+        <td>
+          <div className="date-range">
+            <input
+              type="date"
+              name="periodeTroisiemeDebut"
+              value={formData.periodeTroisiemeDebut}
+              onChange={handleChange}
+            />
+            <span>au</span>
+            <input
+              type="date"
+              name="periodeTroisiemeFin"
+              value={formData.periodeTroisiemeFin}
+              onChange={handleChange}
+            />
+          </div>
+        </td>
+      )}
+    </tr>
+  </tbody>
+</table>
+
+          <div className="form-box only-pdf">
   <div className="form-title">Engagement du bénéficiaire</div>
   <p style={{ marginBottom: '1em', whiteSpace: 'pre-line', lineHeight: '1.7' }}>
     Je soussigné(e), m’engage à :{'\n'}
@@ -588,47 +705,53 @@ export default function DemandeCentreVacances() {
 </div>
         </div>
         </div>
-      <div className="no-print" style={{ textAlign: 'center', marginTop: '30px' }}>
-        {!saved ? (
-          <button
-            onClick={() => setSaved(true)}
-            style={{
-              backgroundColor: '#007acc',
-              color: 'white',
-              padding: '12px 24px',
-              borderRadius: '8px',
-              border: 'none',
-              fontSize: '1rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'background-color 0.3s ease',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#005fa3')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#007acc')}
-          >
-            Enregistrer
-          </button>
-        ) : (
-          <button
-            onClick={handleImprimer}
-            style={{
-              backgroundColor: '#dc2626', // Tailwind red-600
-              color: 'white',
-              padding: '12px 24px',
-              borderRadius: '8px',
-              border: 'none',
-              fontSize: '1rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'background-color 0.3s ease',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#b91c1c')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#dc2626')}
-          >
-            Imprimer
-          </button>
-        )}
-      </div>
+       <div className="no-print" style={{ textAlign: 'center', marginTop: '30px' }}>
+      {!saved ? (
+        <button
+          onClick={() => setSaved(true)}
+          style={{
+            backgroundColor: '#007acc',
+            color: 'white',
+            padding: '12px 24px',
+            borderRadius: '8px',
+            border: 'none',
+            fontSize: '1rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'background-color 0.3s ease',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#005fa3')}
+          onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#007acc')}
+          disabled={isPrinting}
+        >
+          Enregistrer
+        </button>
+      ) : (
+        <button
+          onClick={handleImprimer}
+          disabled={isPrinting}
+          style={{
+            backgroundColor: isPrinting ? '#b91c1c' : '#dc2626',
+            color: 'white',
+            padding: '12px 24px',
+            borderRadius: '8px',
+            border: 'none',
+            fontSize: '1rem',
+            fontWeight: '600',
+            cursor: isPrinting ? 'not-allowed' : 'pointer',
+            transition: 'background-color 0.3s ease',
+          }}
+          onMouseEnter={e => {
+            if (!isPrinting) e.currentTarget.style.backgroundColor = '#b91c1c';
+          }}
+          onMouseLeave={e => {
+            if (!isPrinting) e.currentTarget.style.backgroundColor = '#dc2626';
+          }}
+        >
+          {isPrinting ? 'Impression en cours...' : 'Imprimer'}
+        </button>
+      )}
+    </div>
 
       </div>
     </>

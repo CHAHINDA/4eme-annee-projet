@@ -394,6 +394,12 @@ useEffect(() => {
             <span className="text">Parametre</span>
           </button>
         </li>
+        <li>
+              <button onClick={() => navigate('/admin/dates')}>
+                <span className="icon">📅</span>
+                <span className="text">Saisir les dates</span>
+              </button>
+            </li>
       </ul>
     </>
   )}
@@ -431,6 +437,11 @@ useEffect(() => {
           <span className="icon">⚙️</span>
         </button>
       </li>
+      <li>
+              <button onClick={() => navigate('/admin/dates')}>
+                <span className="icon">📅</span>
+              </button>
+            </li>
     </ul>
   )}
 </nav>

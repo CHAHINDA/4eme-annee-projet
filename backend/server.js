@@ -1,24 +1,37 @@
-// backend/server.js
 const express = require("express");
 const cors = require("cors");
-const { Pool } = require("pg");
-require("dotenv").config();
+const bodyParser = require("body-parser");
 
 const app = express();
+const PORT = 5000;
+
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-const pool = new Pool({
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
-  host: process.env.DB_HOST,
-  port: 5433,
-  database: process.env.DB_NAME,
+// In-memory storage for periods (for now)
+let periods = [];
+
+// Add a new period
+app.post("/api/periods", (req, res) => {
+  const { name, startDate, endDate } = req.body;
+  const id = Date.now(); // simple unique ID
+  const newPeriod = { id, name, startDate, endDate };
+  periods.push(newPeriod);
+  res.status(201).json(newPeriod);
 });
 
-app.get("/api/test", async (req, res) => {
-  const result = await pool.query("SELECT NOW()");
-  res.json(result.rows);
+// Get all periods
+app.get("/api/periods", (req, res) => {
+  res.json(periods);
 });
 
-app.listen(3001, () => console.log("Server running on http://localhost:3001"));
+// Delete a period
+app.delete("/api/periods/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  periods = periods.filter((p) => p.id !== id);
+  res.status(200).json({ message: "Deleted" });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});

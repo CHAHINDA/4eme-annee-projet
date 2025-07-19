@@ -31,7 +31,7 @@ export default function AdminSettings() {
 
         body {
           font-family: 'Urbanist', sans-serif;
-          background: linear-gradient(135deg, #e3f2fd, #fce4ec);
+          background: linear-gradient(135deg, #dbe9f4, #e1e8ea);
           margin: 0;
           padding: 0;
         }
