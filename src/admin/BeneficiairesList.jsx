@@ -1,12 +1,86 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 export default function BeneficiairesList() {
   const navigate = useNavigate()
   const today = new Date().toLocaleDateString('fr-FR')
 
+  // Empty data array for future backend data
+  const beneficiaries = []
+
   const handleRetour = () => {
     navigate('/admin')
+  }
+
+  const handleExportCSV = () => {
+    const headers = ['Mat', 'Nom et Prénom', 'Centre affecté', 'Période affectée']
+    const rows = beneficiaries.map(b => [
+      b.mat,
+      b.nomPrenom,
+      b.centreAffecte,
+      b.periodeAffectee,
+    ])
+
+    const csvContent =
+      '\uFEFF' + // UTF-8 BOM
+      [headers.join(';'), ...rows.map(row => row.map(field => `"${field}"`).join(';'))].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `beneficiaires_${today.replace(/\//g, '-')}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4',
+    })
+
+    const pageWidth = doc.internal.pageSize.getWidth()
+    doc.setFontSize(16)
+    doc.text('LISTE DE BENEFICIAIRES', pageWidth / 2, 15, { align: 'center' })
+    doc.setFontSize(12)
+    doc.text('Catégorie : Agent | Port : DEPL', pageWidth / 2, 22, { align: 'center' })
+    doc.setFontSize(10)
+    doc.text(`Date d'impression: ${today}`, 14, 30)
+
+    const headers = [['Mat', 'Nom et Prénom', 'Centre affecté', 'Période affectée']]
+    const rows = beneficiaries.map(b => [
+      b.mat,
+      b.nomPrenom,
+      b.centreAffecte,
+      b.periodeAffectee,
+    ])
+
+    autoTable(doc, {
+      startY: 35,
+      head: headers,
+      body: rows,
+      styles: {
+        fontSize: 9,
+        cellPadding: 2,
+      },
+      headStyles: {
+        fillColor: [0, 122, 204],
+        textColor: 255,
+        halign: 'center',
+      },
+      bodyStyles: {
+        halign: 'center',
+      },
+      margin: { top: 35, bottom: 20 },
+      theme: 'grid',
+    })
+
+    doc.save(`beneficiaires_${today.replace(/\//g, '-')}.pdf`)
   }
 
   return (
@@ -30,6 +104,7 @@ export default function BeneficiairesList() {
         .button-row {
           display: flex;
           justify-content: flex-end;
+          gap: 12px;
           margin-bottom: 16px;
         }
 
@@ -40,13 +115,28 @@ export default function BeneficiairesList() {
           border-radius: 12px;
           cursor: pointer;
           color: white;
-          background-color: #607d8b;
           box-shadow: 0 6px 20px rgba(0,0,0,0.1);
           transition: transform 0.2s ease, background 0.3s ease;
         }
 
         .btn:hover {
           transform: translateY(-2px) scale(1.03);
+        }
+
+        .btn:active {
+          transform: scale(0.98);
+        }
+
+        .btn-retour {
+          background-color: #607d8b;
+        }
+
+        .btn-pdf {
+          background-color: #e53935;
+        }
+
+        .btn-csv {
+          background-color: #43a047;
         }
 
         .container {
@@ -131,7 +221,9 @@ export default function BeneficiairesList() {
 
       <div className="page-wrapper">
         <div className="button-row">
-          <button className="btn" onClick={handleRetour}>← Retour</button>
+          <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
+          <button className="btn btn-csv" onClick={handleExportCSV}>Exporter CSV</button>
+          <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
         </div>
 
         <div className="container">
@@ -139,7 +231,7 @@ export default function BeneficiairesList() {
           <h1>LISTE DE BENEFICIAIRES</h1>
           <h2>Catégorie : Agent | Port : DEPL</h2>
           <p style={{ textAlign: 'center', marginBottom: '16px', fontWeight: 600 }}>
-            Nombre de bénéficiaires : 0
+            Nombre de bénéficiaires : {beneficiaries.length}
           </p>
           <hr />
 
@@ -153,11 +245,22 @@ export default function BeneficiairesList() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                  Table vide
-                </td>
-              </tr>
+              {beneficiaries.length === 0 ? (
+                <tr>
+                  <td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
+                    Table vide
+                  </td>
+                </tr>
+              ) : (
+                beneficiaries.map((b, idx) => (
+                  <tr key={idx}>
+                    <td>{b.mat}</td>
+                    <td>{b.nomPrenom}</td>
+                    <td>{b.centreAffecte}</td>
+                    <td>{b.periodeAffectee}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
 

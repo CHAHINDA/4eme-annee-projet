@@ -4,20 +4,18 @@ import { useNavigate } from 'react-router-dom'
 export default function UserManagement() {
   const navigate = useNavigate()
 
-  const [form, setForm] = useState({
-    nom: '',
-    matricule: '',
-    dateAffectation: '',
-    execution: '',
-    encadrement: '',
-    cadres: '',
-    cadresSuperieurs: '',
-    situationFamiliale: '',
-    nombreEnfants: '',
-    telephone: '',
-    email: '',
-    password: '',
-  })
+const [form, setForm] = useState({
+  nom: '',
+  matricule: '',
+  dateAffectation: '',
+  role: '',  // <-- new field instead of execution, encadrement, cadres, cadresSuperieurs
+  situationFamiliale: '',
+  nombreEnfants: '',
+  telephone: '',
+  email: '',
+  password: '',
+})
+
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value })
@@ -31,20 +29,18 @@ export default function UserManagement() {
   const handleSubmitAndReset = (e) => {
     e.preventDefault()
     alert('Utilisateur enregistré, vous pouvez en ajouter un autre.')
-    setForm({
-      nom: '',
-      matricule: '',
-      dateAffectation: '',
-      execution: '',
-      encadrement: '',
-      cadres: '',
-      cadresSuperieurs: '',
-      situationFamiliale: '',
-      nombreEnfants: '',
-      telephone: '',
-      email: '',
-      password: '',
-    })
+ setForm({
+  nom: '',
+  matricule: '',
+  dateAffectation: '',
+  role: '',
+  situationFamiliale: '',
+  nombreEnfants: '',
+  telephone: '',
+  email: '',
+  password: '',
+})
+
   }
 
   const handleRetour = () => {
@@ -194,6 +190,33 @@ export default function UserManagement() {
             flex-direction: column;
           }
         }
+          label {
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #333;
+  font-size: 1rem;
+}
+
+select {
+  padding: 12px 16px;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  font-size: 1rem;
+  background: white;
+  cursor: pointer;
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+  appearance: none; /* removes default arrow for some browsers */
+  background-image: url("data:image/svg+xml;utf8,<svg fill='gray' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+}
+
+select:focus {
+  outline: none;
+  box-shadow: 0 0 8px rgba(0, 122, 204, 0.5);
+  transform: scale(1.03);
+}
       `}</style>
 
       <div className="user-form-container">
@@ -214,22 +237,17 @@ export default function UserManagement() {
               <label>Date d’affectation au bureau</label>
               <input type="date" name="dateAffectation" value={form.dateAffectation} onChange={handleChange} />
             </div>
-            <div className="form-group">
-              <label>Exécution</label>
-              <input name="execution" value={form.execution} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Encadrement</label>
-              <input name="encadrement" value={form.encadrement} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Cadres</label>
-              <input name="cadres" value={form.cadres} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Cadres Supérieurs</label>
-              <input name="cadresSuperieurs" value={form.cadresSuperieurs} onChange={handleChange} />
-            </div>
+           <div className="form-group">
+  <label>Rôle</label>
+  <select name="role" value={form.role} onChange={handleChange}>
+    <option value="">-- Sélectionner un rôle --</option>
+    <option value="Exécution">Exécution</option>
+    <option value="Supervision">Supervision</option>
+    <option value="Cadres">Cadres</option>
+    <option value="Cadres Supérieurs">Cadres Supérieurs</option>
+  </select>
+</div>
+
             <div className="form-group">
               <label>Situation familiale</label>
               <input name="situationFamiliale" value={form.situationFamiliale} onChange={handleChange} />

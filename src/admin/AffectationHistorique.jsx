@@ -1,12 +1,123 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 export default function AffectationHistorique() {
   const navigate = useNavigate()
   const today = new Date().toLocaleDateString('fr-FR')
 
+  // Empty data for now - will fetch from backend later
+  const records = []
+
   const handleRetour = () => {
     navigate('/admin')
+  }
+
+  const handleExportCSV = () => {
+    const headers = [
+      'Mat',
+      'Nom',
+      'Situation',
+      'Nbr. Enfant',
+      'An. Recrut.',
+      'A20',
+      'A21',
+      'A22',
+      'A24',
+      'Note',
+    ]
+
+    const rows = records.map(r => [
+      r.mat,
+      r.nom,
+      r.situation,
+      r.nbrEnfant,
+      r.anRecrut,
+      r.A20,
+      r.A21,
+      r.A22,
+      r.A24,
+      r.note,
+    ])
+
+    const csvContent =
+      '\uFEFF' + // UTF-8 BOM for Excel compatibility with accents
+      [headers.join(';'), ...rows.map(row => row.map(field => `"${field}"`).join(';'))].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `historique_affectation_${today.replace(/\//g, '-')}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4',
+    })
+
+    const pageWidth = doc.internal.pageSize.getWidth()
+    doc.setFontSize(16)
+    doc.text("ETAT D'HISTORIQUE D'AFFECTATION", pageWidth / 2, 15, { align: 'center' })
+    doc.setFontSize(10)
+    doc.text(`Port : DEPL`, pageWidth / 2, 22, { align: 'center' })
+    doc.text(`Date d'impression: ${today}`, 14, 30)
+
+    const headers = [
+      [
+        'Mat',
+        'Nom',
+        'Situation',
+        'Nbr. Enfant',
+        'An. Recrut.',
+        'A20',
+        'A21',
+        'A22',
+        'A24',
+        'Note',
+      ],
+    ]
+
+    const rows = records.map(r => [
+      r.mat,
+      r.nom,
+      r.situation,
+      r.nbrEnfant?.toString() || '',
+      r.anRecrut?.toString() || '',
+      r.A20 || '',
+      r.A21 || '',
+      r.A22 || '',
+      r.A24 || '',
+      r.note || '',
+    ])
+
+    autoTable(doc, {
+      startY: 35,
+      head: headers,
+      body: rows,
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+      },
+      headStyles: {
+        fillColor: [0, 122, 204],
+        textColor: 255,
+        halign: 'center',
+      },
+      bodyStyles: {
+        halign: 'center',
+      },
+      margin: { top: 35, bottom: 20 },
+      theme: 'grid',
+    })
+
+    doc.save(`historique_affectation_${today.replace(/\//g, '-')}.pdf`)
   }
 
   return (
@@ -30,6 +141,7 @@ export default function AffectationHistorique() {
         .button-row {
           display: flex;
           justify-content: flex-end;
+          gap: 12px;
           margin-bottom: 16px;
         }
 
@@ -40,13 +152,28 @@ export default function AffectationHistorique() {
           border-radius: 12px;
           cursor: pointer;
           color: white;
-          background-color: #607d8b;
           box-shadow: 0 6px 20px rgba(0,0,0,0.1);
           transition: transform 0.2s ease, background 0.3s ease;
         }
 
         .btn:hover {
           transform: translateY(-2px) scale(1.03);
+        }
+
+        .btn:active {
+          transform: scale(0.98);
+        }
+
+        .btn-retour {
+          background-color: #607d8b;
+        }
+
+        .btn-pdf {
+          background-color: #e53935;
+        }
+
+        .btn-csv {
+          background-color: #43a047;
         }
 
         .container {
@@ -131,7 +258,9 @@ export default function AffectationHistorique() {
 
       <div className="page-wrapper">
         <div className="button-row">
-          <button className="btn" onClick={handleRetour}>← Retour</button>
+          <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
+          <button className="btn btn-csv" onClick={handleExportCSV}>Exporter CSV</button>
+          <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
         </div>
 
         <div className="container">
@@ -156,11 +285,28 @@ export default function AffectationHistorique() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td colSpan="10" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                  Table vide
-                </td>
-              </tr>
+              {records.length === 0 ? (
+                <tr>
+                  <td colSpan="10" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
+                    Table vide
+                  </td>
+                </tr>
+              ) : (
+                records.map((rec, idx) => (
+                  <tr key={idx}>
+                    <td>{rec.mat}</td>
+                    <td>{rec.nom}</td>
+                    <td>{rec.situation}</td>
+                    <td>{rec.nbrEnfant}</td>
+                    <td>{rec.anRecrut}</td>
+                    <td>{rec.A20}</td>
+                    <td>{rec.A21}</td>
+                    <td>{rec.A22}</td>
+                    <td>{rec.A24}</td>
+                    <td>{rec.note}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
 

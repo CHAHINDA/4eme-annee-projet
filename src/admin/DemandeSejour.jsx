@@ -1,6 +1,8 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { jsPDF } from 'jspdf'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+
 
 export default function DemandeSejour() {
   const navigate = useNavigate()
@@ -71,7 +73,7 @@ export default function DemandeSejour() {
     ])
 
     // Compose CSV content
-    const csvContent = [
+    const csvContent = '\uFEFF' +  [
       headers.join(','),
       ...rows.map(row => row.map(field => `"${field}"`).join(',')),
     ].join('\r\n')
@@ -89,17 +91,24 @@ export default function DemandeSejour() {
 
   // Export PDF logic using jsPDF
   const handleExportPDF = () => {
-    const doc = new jsPDF()
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4',
+  });
 
-    const title = 'Demandes de séjour reçues - Session Estivale 2025'
-    doc.setFontSize(16)
-    doc.text('Marsa Maroc / DEPL', 105, 15, null, null, 'center')
-    doc.setFontSize(12)
-    doc.text(title, 105, 25, null, null, 'center')
-    doc.setFontSize(10)
-    doc.text(`Date d'impression: ${today}`, 14, 35)
+  const title = 'Demandes de séjour reçues - Session Estivale 2025';
+  const pageWidth = doc.internal.pageSize.getWidth();
 
-    const headers = [
+  doc.setFontSize(16);
+  doc.text('Marsa Maroc / DEPL', pageWidth / 2, 15, { align: 'center' });
+  doc.setFontSize(12);
+  doc.text(title, pageWidth / 2, 25, { align: 'center' });
+  doc.setFontSize(10);
+  doc.text(`Date d'impression: ${today}`, 14, 35);
+
+  const headers = [
+    [
       'Matricule',
       'Nom & Prénom',
       "Date d'embauche",
@@ -111,50 +120,46 @@ export default function DemandeSejour() {
       'Période 2',
       'Choix 3',
       'Période 3',
-    ]
+    ],
+  ];
 
-    // Prepare rows array for jsPDF autoTable
-    const rows = demandes.map(d => [
-      d.matricule,
-      d.nomPrenom,
-      d.dateEmbauche,
-      d.nes.toString(),
-      d.situationF,
-      d.choix1,
-      d.periode1,
-      d.choix2,
-      d.periode2,
-      d.choix3,
-      d.periode3,
-    ])
+  const rows = demandes.map(d => [
+    d.matricule,
+    d.nomPrenom,
+    d.dateEmbauche,
+    d.nes.toString(),
+    d.situationF,
+    d.choix1,
+    d.periode1,
+    d.choix2,
+    d.periode2,
+    d.choix3,
+    d.periode3,
+  ]);
 
-    // Using autoTable plugin for better table formatting
-    // But if you don't have autoTable installed, we'll do a simple print instead:
-    // We'll print header + rows manually:
-    let y = 45
-    const lineHeight = 7
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'bold')
-    headers.forEach((header, i) => {
-      doc.text(header, 14 + i * 18, y)
-    })
+  autoTable(doc, {
+    startY: 40,
+    head: headers,
+    body: rows,
+    styles: {
+      fontSize: 8,
+      cellPadding: 2,
+    },
+    headStyles: {
+      fillColor: [0, 122, 204],
+      textColor: 255,
+      halign: 'center',
+    },
+    bodyStyles: {
+      halign: 'center',
+    },
+    margin: { top: 40, bottom: 20 },
+    theme: 'grid',
+  });
 
-    doc.setFont('helvetica', 'normal')
-    y += lineHeight
+  doc.save('demandes_sejour.pdf');
+};
 
-    rows.forEach(row => {
-      row.forEach((cell, i) => {
-        doc.text(cell || '-', 14 + i * 18, y)
-      })
-      y += lineHeight
-      if (y > 280) {
-        doc.addPage()
-        y = 15
-      }
-    })
-
-    doc.save('demandes_sejour.pdf')
-  }
 
   return (
     <>
@@ -313,7 +318,7 @@ export default function DemandeSejour() {
       <div className="page-wrapper">
         <div className="button-row">
           <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
-          <button className="btn btn-csv" onClick={handleExportCSV}>Exporter CSV</button>
+          <button className="btn btn-csv" onClick={handleExportCSV}>Exporter EXCEL</button>
           <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
         </div>
 

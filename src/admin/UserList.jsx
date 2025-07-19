@@ -1,12 +1,84 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 export default function UserList() {
-  const users = []
   const navigate = useNavigate()
+
+  // Empty users array to be filled later with backend data
+  const users = []
+
+  const today = new Date().toLocaleDateString('fr-FR')
 
   const handleRetour = () => {
     navigate('/admin')
+  }
+
+  const handleExportCSV = () => {
+    const headers = ['Nom complet', 'Matricule', 'Email', 'Rôle', "Date d'affectation"]
+
+    const rows = users.map(user => [
+      user.nom || '',
+      user.matricule || '',
+      user.email || '',
+      user.role || '',
+      user.dateAffectation || '',
+    ])
+
+    const csvContent = '\uFEFF' + [
+      headers.join(','),
+      ...rows.map(row => row.map(field => `"${field}"`).join(',')),
+    ].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'users_list.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4',
+    })
+
+    const pageWidth = doc.internal.pageSize.getWidth()
+
+    doc.setFontSize(16)
+    doc.text('Marsa Maroc / DEPL', pageWidth / 2, 15, { align: 'center' })
+    doc.setFontSize(12)
+    doc.text('Liste des utilisateurs enregistrés', pageWidth / 2, 25, { align: 'center' })
+    doc.setFontSize(10)
+    doc.text(`Date d'impression: ${today}`, 14, 35)
+
+    const headers = [['Nom complet', 'Matricule', 'Email', 'Rôle', "Date d'affectation"]]
+
+    const rows = users.map(user => [
+      user.nom || '',
+      user.matricule || '',
+      user.email || '',
+      user.role || '',
+      user.dateAffectation || '',
+    ])
+
+    autoTable(doc, {
+      startY: 40,
+      head: headers,
+      body: rows,
+      styles: { fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [0, 122, 204], textColor: 255, halign: 'center' },
+      bodyStyles: { halign: 'center' },
+      margin: { top: 40, bottom: 20 },
+      theme: 'grid',
+    })
+
+    doc.save('users_list.pdf')
   }
 
   return (
@@ -140,6 +212,7 @@ export default function UserList() {
         .empty-row td {
           color: #aaa;
           font-style: italic;
+          text-align: center;
         }
 
         .pagination-info {
@@ -149,20 +222,54 @@ export default function UserList() {
           color: #666;
         }
 
-        @media (max-width: 600px) {
-          .btn-action {
-            padding: 5px 10px;
-            font-size: 0.9rem;
-          }
+      .button-row {
+  max-width: 1000px; /* same as .user-list-container */
+  margin: 40px auto 0 auto; /* top margin + centered horizontally */
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 0 40px; /* same horizontal padding as container */
+}
 
-          th, td {
-            font-size: 0.9rem;
-          }
+
+        .btn {
+          padding: 10px 24px;
+          font-weight: 600;
+          border: none;
+          border-radius: 12px;
+          cursor: pointer;
+          color: white;
+          box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+          transition: transform 0.2s ease, background 0.3s ease;
+        }
+
+        .btn:hover {
+          transform: translateY(-2px) scale(1.03);
+        }
+
+        .btn:active {
+          transform: scale(0.98);
+        }
+
+        .btn-retour {
+          background-color: #607d8b;
+        }
+
+        .btn-pdf {
+          background-color: #e53935;
+        }
+
+        .btn-csv {
+          background-color: #43a047;
         }
       `}</style>
-
+ <div className="button-row">
+  <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
+  <button className="btn btn-csv" onClick={handleExportCSV}>Exporter CSV</button>
+  <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
+</div>
       <div className="user-list-container">
-        <button className="retour-btn" onClick={handleRetour}>← Retour</button>
+      
 
         <h2>Liste des utilisateurs</h2>
         <p>Voici la liste complète des utilisateurs enregistrés.</p>
@@ -176,13 +283,12 @@ export default function UserList() {
               <th>Email</th>
               <th>Rôle</th>
               <th>Date d'affectation</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.length === 0 ? (
               <tr className="empty-row">
-                <td colSpan="6" style={{ textAlign: 'center' }}>Aucun utilisateur enregistré.</td>
+                <td colSpan="5">Aucun utilisateur enregistré.</td>
               </tr>
             ) : (
               users.map((user, index) => (
@@ -192,10 +298,6 @@ export default function UserList() {
                   <td>{user.email}</td>
                   <td>{user.role}</td>
                   <td>{user.dateAffectation}</td>
-                  <td className="actions">
-                    <button className="btn-action btn-modify">Modifier</button>
-                    <button className="btn-action btn-delete">Supprimer</button>
-                  </td>
                 </tr>
               ))
             )}
