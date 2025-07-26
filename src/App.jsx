@@ -28,6 +28,7 @@ function App() {
 
         {/* User management */}
         <Route path="/admin/users/add" element={<UserManagement />} /> {/* Ajouter utilisateur */}
+        <Route path="/users/edit/:matricule" element={<UserManagement />} /> {/* modifier utilisateur */}
         <Route path="/admin/users/list" element={<UserList />} />      {/* Liste utilisateurs */}
 
         {/* Gestion des demandes */}

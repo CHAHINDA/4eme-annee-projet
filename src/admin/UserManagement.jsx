@@ -1,51 +1,164 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
 export default function UserManagement() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
+  const { matricule } = useParams();  // get matricule from URL, undefined if add mode
+  const isEdit = Boolean(matricule);
+  const [form, setForm] = useState({
+    nom: '',
+    matricule: '',
+    dateAffectation: '',
+    role: '',
+    situationFamiliale: '',
+    nombreEnfants: '',
+    telephone: '',
+    email: '',
+    password: '',
+  });
 
-const [form, setForm] = useState({
-  nom: '',
-  matricule: '',
-  dateAffectation: '',
-  role: '',  // <-- new field instead of execution, encadrement, cadres, cadresSuperieurs
-  situationFamiliale: '',
-  nombreEnfants: '',
-  telephone: '',
-  email: '',
-  password: '',
-})
-
+  // Load existing user data if editing
+  useEffect(() => {
+    if (matricule) {
+      // Fetch user data from API to populate form
+      fetch(`http://localhost:5000/api/users/${matricule}`)
+        .then(res => {
+          if (!res.ok) throw new Error("User not found");
+          return res.json();
+        })
+        .then(data => {
+          setForm({
+            nom: data.nom_complet || '',
+            matricule: data.matricule || '',
+            dateAffectation: data.date_affectation_au_bureau ? data.date_affectation_au_bureau.slice(0, 10) : '',
+            role: data.role || '',
+            situationFamiliale: data.situation_familiale || '',
+            nombreEnfants: data.nombre_enfants_beneficiaires || '',
+            telephone: data.telephone || '',
+            email: data.email || '',
+            password: '', // leave blank for security reasons, only update if changed
+          });
+        })
+        .catch(err => {
+          alert("Erreur lors du chargement de l'utilisateur: " + err.message);
+          navigate('/admin');
+        });
+    }
+  }, [matricule, navigate]);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
-  }
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    alert('Utilisateur enregistré')
-  }
+  // POST (add) user function
+  const postUserToAPI = async () => {
+    const method = matricule ? 'PUT' : 'POST'; // PUT to update if editing
 
-  const handleSubmitAndReset = (e) => {
-    e.preventDefault()
-    alert('Utilisateur enregistré, vous pouvez en ajouter un autre.')
- setForm({
-  nom: '',
-  matricule: '',
-  dateAffectation: '',
-  role: '',
-  situationFamiliale: '',
-  nombreEnfants: '',
-  telephone: '',
-  email: '',
-  password: '',
-})
+    // Prepare body
+    const bodyData = {
+      nom_complet: form.nom,
+      matricule: form.matricule,
+      date_affectation_au_bureau: form.dateAffectation,
+      role: form.role,
+      situation_familiale: form.situationFamiliale,
+      nombre_enfants_beneficiaires: form.nombreEnfants,
+      telephone: form.telephone,
+      email: form.email,
+    };
 
+    // Only send password if filled (for editing)
+    if (form.password) {
+      bodyData.password = form.password;
+    }
+
+    try {
+      const response = await fetch(
+        matricule ? `http://localhost:5000/api/users/${matricule}` : 'http://localhost:5000/api/users',
+        {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(bodyData),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erreur API: ${errorText}`);
+      }
+
+      return true;
+    } catch (error) {
+      alert(`Erreur lors de l'enregistrement: ${error.message}`);
+      return false;
+    }
+  };
+
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  try {
+    const url = isEdit
+      ? `http://localhost:5000/api/users/${matricule}`
+      : 'http://localhost:5000/api/users';
+
+    const method = isEdit ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
+      method,
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        nom_complet: form.nom,
+        matricule: form.matricule,
+        date_affectation_au_bureau: form.dateAffectation,
+        role: form.role,
+        situation_familiale: form.situationFamiliale,
+        nombre_enfants_beneficiaires: form.nombreEnfants,
+        telephone: form.telephone,
+        email: form.email,
+        password: form.password || undefined,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Erreur API: ${errorText}`);
+    }
+
+    alert(`Utilisateur ${isEdit ? 'modifié' : 'enregistré'} avec succès.`);
+
+    if (!isEdit) return true; // allow reset only in add mode
+
+    navigate('/admin/users/list');
+    return true;
+  } catch (err) {
+    alert(`Erreur: ${err.message}`);
+    return false;
   }
+};
+const handleSubmitAndReset = async (e) => {
+  e.preventDefault();
+  const success = await handleSubmit(e);
+  if (success && !isEdit) {
+    setForm({
+      nom: '',
+      matricule: '',
+      dateAffectation: '',
+      role: '',
+      situationFamiliale: '',
+      nombreEnfants: '',
+      telephone: '',
+      email: '',
+      password: '',
+    });
+  }
+};
+
 
   const handleRetour = () => {
-    navigate('/admin')
-  }
+    navigate('/admin');
+  };
 
   return (
     <>
@@ -220,61 +333,135 @@ select:focus {
       `}</style>
 
       <div className="user-form-container">
-        <button className="retour-btn" onClick={handleRetour}>← Retour</button>
+      <button className="retour-btn" onClick={handleRetour}>← Retour</button>
 
-        <h2>Créer un nouveau compte utilisateur</h2>
-        <form>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Nom complet</label>
-              <input name="nom" value={form.nom} onChange={handleChange} required />
-            </div>
-            <div className="form-group">
-              <label>Matricule</label>
-              <input name="matricule" value={form.matricule} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Date d’affectation au bureau</label>
-              <input type="date" name="dateAffectation" value={form.dateAffectation} onChange={handleChange} />
-            </div>
-           <div className="form-group">
-  <label>Rôle</label>
-  <select name="role" value={form.role} onChange={handleChange}>
-    <option value="">-- Sélectionner un rôle --</option>
-    <option value="Exécution">Exécution</option>
-    <option value="Supervision">Supervision</option>
-    <option value="Cadres">Cadres</option>
-    <option value="Cadres Supérieurs">Cadres Supérieurs</option>
-  </select>
-</div>
+      <h2>{isEdit ? 'Modifier utilisateur' : 'Créer un nouveau compte utilisateur'}</h2>
+        <form onSubmit={handleSubmit}>
+  <div className="form-grid">
+    <div className="form-group">
+      <label htmlFor="nom">Nom complet</label>
+      <input
+        id="nom"
+        name="nom"
+        value={form.nom}
+        onChange={handleChange}
+        
+      />
+    </div>
 
-            <div className="form-group">
-              <label>Situation familiale</label>
-              <input name="situationFamiliale" value={form.situationFamiliale} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Nombre d’enfants bénéficiaires</label>
-              <input type="number" name="nombreEnfants" value={form.nombreEnfants} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Téléphone</label>
-              <input name="telephone" value={form.telephone} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Email</label>
-              <input type="email" name="email" value={form.email} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Mot de passe</label>
-              <input type="password" name="password" value={form.password} onChange={handleChange} />
-            </div>
-          </div>
+    <div className="form-group">
+      <label htmlFor="matricule">Matricule</label>
+      <input
+        id="matricule"
+        name="matricule"
+        value={form.matricule}
+        onChange={handleChange}
+        
+        // add disabled={isEdit} if you want to disable matricule editing
+      />
+    </div>
 
-          <div className="form-buttons">
-            <button type="submit" onClick={handleSubmit}>Enregistrer</button>
-            <button type="button" onClick={handleSubmitAndReset}>Ajouter un autre</button>
-          </div>
-        </form>
+    <div className="form-group">
+      <label htmlFor="dateAffectation">Date d’affectation au bureau</label>
+      <input
+        id="dateAffectation"
+        type="date"
+        name="dateAffectation"
+        value={form.dateAffectation}
+        onChange={handleChange}
+      />
+    </div>
+
+    <div className="form-group">
+      <label htmlFor="role">Rôle</label>
+      <select
+        id="role"
+        name="role"
+        value={form.role}
+        onChange={handleChange}
+        
+      >
+        <option value="">-- Sélectionner un rôle --</option>
+        <option value="Exécution">Exécution</option>
+        <option value="Supervision">Supervision</option>
+        <option value="Cadres">Cadres</option>
+        <option value="Cadres Supérieurs">Cadres Supérieurs</option>
+      </select>
+    </div>
+
+    <div className="form-group">
+      <label htmlFor="situationFamiliale">Situation familiale</label>
+      <select
+        id="situationFamiliale"
+        name="situationFamiliale"
+        value={form.situationFamiliale}
+        onChange={handleChange}
+        
+      >
+        <option value="">-- Sélectionner une situation --</option>
+        <option value="Célibataire">Célibataire</option>
+        <option value="Marié(e)">Marié(e)</option>
+        <option value="Divorcé(e)">Divorcé(e)</option>
+        <option value="Veuf(ve)">Veuf(ve)</option>
+        <option value="Pacsé(e)">Pacsé(e)</option>
+        <option value="En concubinage">En concubinage</option>
+        <option value="Séparé(e)">Séparé(e)</option>
+      </select>
+    </div>
+
+    <div className="form-group">
+      <label htmlFor="nombreEnfants">Nombre d’enfants bénéficiaires</label>
+      <input
+        id="nombreEnfants"
+        type="number"
+        name="nombreEnfants"
+        value={form.nombreEnfants}
+        onChange={handleChange}
+        min={0}
+      />
+    </div>
+
+    <div className="form-group">
+      <label htmlFor="telephone">Téléphone</label>
+      <input
+        id="telephone"
+        name="telephone"
+        value={form.telephone}
+        onChange={handleChange}
+      />
+    </div>
+
+    <div className="form-group">
+      <label htmlFor="email">Email</label>
+      <input
+        id="email"
+        type="email"
+        name="email"
+        value={form.email}
+        onChange={handleChange}
+        
+      />
+    </div>
+
+    <div className="form-group">
+      <label htmlFor="password">Mot de passe</label>
+      <input
+        id="password"
+        type="password"
+        name="password"
+        value={form.password}
+        onChange={handleChange}
+        // required only if adding new user
+      />
+    </div>
+  </div>
+
+  <div className="form-buttons">
+    <button type="submit">Enregistrer</button>
+    <button type="button" onClick={handleSubmitAndReset}>Ajouter un autre</button>
+  </div>
+</form>
+
       </div>
     </>
   )

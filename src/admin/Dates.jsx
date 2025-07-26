@@ -264,8 +264,8 @@ export default function DatesSettings() {
       .map((period) => (
         <li key={period.id}>
           {period.name} — du{" "}
-          {new Date(period.startDate).toLocaleDateString("fr-FR")} au{" "}
-          {new Date(period.endDate).toLocaleDateString("fr-FR")}
+          {new Date(period.start_date).toLocaleDateString("fr-FR")} au{" "}
+          {new Date(period.end_date).toLocaleDateString("fr-FR")}
           <button onClick={() => deletePeriod(period.id)}>Supprimer</button>
         </li>
       ))

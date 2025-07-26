@@ -146,34 +146,49 @@ const validateDate = (dateStr) => {
 
   if (selected < today) {
     alert('❌ Cette date est déjà passée.');
-    navigate('/home');  // Redirect after alert
+    navigate('/home');
     return false;
   }
 
-  const matched = allCampaigns.find(({ startDate, endDate }) => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+  // Find matching campaign (if any)
+  const matched = allCampaigns.find(({ start_date, end_date }) => {
+    const start = new Date(start_date);
+    const end = new Date(end_date);
     return selected >= start && selected <= end;
   });
 
-  if (!matched) {
-    alert('❌ Vous devez aller à la section normale pour cette période.');
-    navigate('/home');  // Redirect after alert
-    return false;
+  if (type === 'normal') {
+    if (matched) {
+      alert(`❌ Cette date correspond à la campagne "${matched.name}". Veuillez aller dans la section campagne.`);
+      navigate('/home');
+      return false;
+    }
+    return true; // ✅ Date is outside campaigns, so allowed in normal
   }
 
-  if (matched.name !== (campaign?.name || 'Normal')) {
-    alert(`❌ Cette date correspond à ${matched.name}. Veuillez changer de section.`);
-    navigate('/home');  // Redirect after alert
-    return false;
+  if (type === 'campagne') {
+    if (!matched) {
+      alert('❌ Vous devez aller à la section normale pour cette période.');
+      navigate('/home');
+      return false;
+    }
+
+    if (matched.name !== campaign?.name) {
+      alert(`❌ Cette date correspond à "${matched.name}". Veuillez changer de campagne.`);
+      navigate('/home');
+      return false;
+    }
+
+    return true; // ✅ Date is inside the correct campaign
   }
 
-  return true;
+  return false;
 };
 
 
 
   return (
+    
     
 
     <>
