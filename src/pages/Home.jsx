@@ -1,51 +1,71 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
-import logo from '../assets/marsa-port.jpg'
+import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import logo from '../assets/marsa-port.jpg';
 
-export default function HomePage({ username = 'Utilisateur', onLogout }) {
-  const [showMonths, setShowMonths] = useState(false)
-  const [campaigns, setCampaigns] = useState([])
-  const navigate = useNavigate()
+export default function HomePage({ onLogout }) {
+  const [showMonths, setShowMonths] = useState(false);
+  const [campaigns, setCampaigns] = useState([]);
+  const navigate = useNavigate();
+  const location = useLocation();
+const [nomComplet, setNomComplet] = useState('Utilisateur');
+
+useEffect(() => {
+  const userData = localStorage.getItem('user');
+  if (location.state?.nom_complet && location.state?.matricule) {
+    setNomComplet(location.state.nom_complet);
+    localStorage.setItem('user', JSON.stringify({
+      nom_complet: location.state.nom_complet,
+      matricule: location.state.matricule
+    }));
+  } else if (userData) {
+    const user = JSON.parse(userData);
+    setNomComplet(user.nom_complet || 'Utilisateur');
+  }
+}, [location.state]);
+
+
 
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/periods')
-        const now = new Date()
+        const res = await axios.get('http://localhost:5000/api/periods');
+        const now = new Date();
 
-        // Use start_date and end_date, not startDate/endDate
-        const activeCampaigns = res.data.filter(({ start_date, end_date }) => {
-          const end = new Date(end_date)
-          return end >= now
-        })
+        const activeCampaigns = res.data.filter(({ end_date }) => {
+          const end = new Date(end_date);
+          return end >= now;
+        });
 
-        setCampaigns(activeCampaigns)
+        setCampaigns(activeCampaigns);
       } catch (err) {
-        console.error('Failed to fetch campaigns:', err)
+        console.error('Failed to fetch campaigns:', err);
       }
-    }
+    };
 
-    fetchCampaigns()
-  }, [])
+    fetchCampaigns();
+  }, []);
 
-  const handleNormalClick = () => {
-    setShowMonths(false)
-    navigate('/demande', { state: { type: 'normal' } })
-  }
+const userData = JSON.parse(localStorage.getItem('user') || '{}');
 
-  const handleCompagneClick = () => {
-    setShowMonths(prev => !prev)
-  }
+const handleNormalClick = () => {
+  setShowMonths(false);
+  navigate('/demande', { state: { type: 'normal', matricule: userData.matricule } });
+};
 
-  const handleCampaignSelect = (campaign) => {
-    navigate('/demande', { state: { type: 'campagne', campaign } })
-  }
+const handleCompagneClick = () => {
+    setShowMonths(prev => !prev);
+  };
+const handleCampaignSelect = (campaign) => {
+  navigate('/demande', { state: { type: 'campagne', campaign, matricule: userData.matricule } });
+};
 
-  const handleLogout = () => {
-    if (onLogout) onLogout()
-    navigate('/')
-  }
+ const handleLogout = () => {
+  localStorage.removeItem('user');
+  if (onLogout) onLogout();
+  navigate('/');
+};
+
 
   return (
     <>
@@ -220,7 +240,7 @@ export default function HomePage({ username = 'Utilisateur', onLogout }) {
         <button className="logout" onClick={handleLogout}>Déconnexion</button>
         <div className="card">
           <img src={logo} alt="Logo" className="logo" />
-          <div className="welcome">Bienvenue, {username}</div>
+          <div className="welcome">Bienvenue, {nomComplet}</div>
 
           <button className="btn" onClick={handleNormalClick}>
             Demande Normal

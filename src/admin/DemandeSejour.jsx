@@ -1,48 +1,29 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
-
 export default function DemandeSejour() {
   const navigate = useNavigate()
-
-  const demandes = [
-    {
-      matricule: 'A12345',
-      nomPrenom: 'Ali Ben Said',
-      dateEmbauche: '2015-06-15',
-      nes: 2,
-      situationF: 'Marié(e)',
-      choix1: 'Agadir',
-      periode1: '01/08/2025 au 10/08/2025',
-      choix2: 'Essaouira',
-      periode2: '12/08/2025 au 20/08/2025',
-      choix3: 'Tanger',
-      periode3: '22/08/2025 au 30/08/2025',
-    },
-    {
-      matricule: 'B67890',
-      nomPrenom: 'Fatima Zahra',
-      dateEmbauche: '2019-04-20',
-      nes: 1,
-      situationF: 'Célibataire',
-      choix1: 'Casablanca',
-      periode1: '05/08/2025 au 15/08/2025',
-      choix2: 'Rabat',
-      periode2: '16/08/2025 au 24/08/2025',
-      choix3: '',
-      periode3: '',
-    },
-  ]
-
+  const [demandes, setDemandes] = useState([])
   const today = new Date().toLocaleDateString('fr-FR')
+
+useEffect(() => {
+  fetch('http://localhost:5000/api/demandes') // Change to your actual API URL
+    .then(res => {
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    })
+    .then(data => setDemandes(data))
+    .catch(err => console.error('Erreur fetch demandes:', err));
+}, []);
+
 
   const handleRetour = () => {
     navigate('/admin')
   }
 
-  // Export CSV logic
+  // CSV Export
   const handleExportCSV = () => {
     const headers = [
       'Matricule',
@@ -56,29 +37,35 @@ export default function DemandeSejour() {
       'Période 2',
       'Choix 3',
       'Période 3',
+      'Type de demande',
+      'Statut',
+      'Créé le',
+      'Modifié le',
     ]
 
     const rows = demandes.map(d => [
       d.matricule,
-      d.nomPrenom,
-      d.dateEmbauche,
-      d.nes,
-      d.situationF,
-      d.choix1,
-      d.periode1,
-      d.choix2,
-      d.periode2,
-      d.choix3,
-      d.periode3,
+      d.nom_complet,
+      d.date_affectation_au_bureau || '',
+      d.nes || '',
+      d.situation_familiale || '',
+      d.premier_choix || '',
+      d.periode1 || '',
+      d.deuxieme_choix || '',
+      d.periode2 || '',
+      d.troisieme_choix || '',
+      d.periode3 || '',
+      d.demande_type || '',
+      d.statut || '',
+      d.cree_le || '',
+      d.modifie_le || '',
     ])
 
-    // Compose CSV content
-    const csvContent = '\uFEFF' +  [
+    const csvContent = '\uFEFF' + [
       headers.join(','),
       ...rows.map(row => row.map(field => `"${field}"`).join(',')),
     ].join('\r\n')
 
-    // Create blob and trigger download
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -89,26 +76,25 @@ export default function DemandeSejour() {
     document.body.removeChild(link)
   }
 
-  // Export PDF logic using jsPDF
+  // PDF Export
   const handleExportPDF = () => {
-  const doc = new jsPDF({
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4',
-  });
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4',
+    })
 
-  const title = 'Demandes de séjour reçues - Session Estivale 2025';
-  const pageWidth = doc.internal.pageSize.getWidth();
+    const title = 'Demandes de séjour reçues - Session Estivale 2025'
+    const pageWidth = doc.internal.pageSize.getWidth()
 
-  doc.setFontSize(16);
-  doc.text('Marsa Maroc / DEPL', pageWidth / 2, 15, { align: 'center' });
-  doc.setFontSize(12);
-  doc.text(title, pageWidth / 2, 25, { align: 'center' });
-  doc.setFontSize(10);
-  doc.text(`Date d'impression: ${today}`, 14, 35);
+    doc.setFontSize(16)
+    doc.text('Marsa Maroc / DEPL', pageWidth / 2, 15, { align: 'center' })
+    doc.setFontSize(12)
+    doc.text(title, pageWidth / 2, 25, { align: 'center' })
+    doc.setFontSize(10)
+    doc.text(`Date d'impression: ${today}`, 14, 35)
 
-  const headers = [
-    [
+    const headers = [[
       'Matricule',
       'Nom & Prénom',
       "Date d'embauche",
@@ -120,44 +106,110 @@ export default function DemandeSejour() {
       'Période 2',
       'Choix 3',
       'Période 3',
-    ],
-  ];
+      'Type de demande',
+      'Statut',
+      'Créé le',
+      'Modifié le',
+    ]]
 
-  const rows = demandes.map(d => [
-    d.matricule,
-    d.nomPrenom,
-    d.dateEmbauche,
-    d.nes.toString(),
-    d.situationF,
-    d.choix1,
-    d.periode1,
-    d.choix2,
-    d.periode2,
-    d.choix3,
-    d.periode3,
-  ]);
+    const rows = demandes.map(d => [
+      d.matricule,
+      d.nom_complet,
+      d.date_affectation_au_bureau || '',
+      (d.nes || '').toString(),
+      d.situation_familiale || '',
+      d.premier_choix || '',
+      d.periode1 || '',
+      d.deuxieme_choix || '',
+      d.periode2 || '',
+      d.troisieme_choix || '',
+      d.periode3 || '',
+      d.demande_type || '',
+      d.statut || '',
+      d.cree_le || '',
+      d.modifie_le || '',
+    ])
 
-  autoTable(doc, {
-    startY: 40,
-    head: headers,
-    body: rows,
-    styles: {
-      fontSize: 8,
-      cellPadding: 2,
-    },
-    headStyles: {
-      fillColor: [0, 122, 204],
-      textColor: 255,
-      halign: 'center',
-    },
-    bodyStyles: {
-      halign: 'center',
-    },
-    margin: { top: 40, bottom: 20 },
-    theme: 'grid',
-  });
+    autoTable(doc, {
+      startY: 40,
+      head: headers,
+      body: rows,
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+      },
+      headStyles: {
+        fillColor: [0, 122, 204],
+        textColor: 255,
+        halign: 'center',
+      },
+      bodyStyles: {
+        halign: 'center',
+      },
+      margin: { top: 40, bottom: 20 },
+      theme: 'grid',
+    })
 
-  doc.save('demandes_sejour.pdf');
+    doc.save('demandes_sejour.pdf')
+  }
+
+  const handleDelete = async (id) => {
+  if (!window.confirm('Voulez-vous vraiment supprimer cette demande ?')) return
+
+  try {
+    const res = await fetch(`http://localhost:5000/api/demandes/${id}`, {
+      method: 'DELETE',
+    })
+
+    if (!res.ok) {
+      throw new Error('Erreur lors de la suppression')
+    }
+
+    // Update frontend state
+    setDemandes(demandes.filter(d => d.id !== id))
+  } catch (err) {
+    console.error('Erreur suppression:', err)
+    alert('Échec de la suppression. Veuillez réessayer.')
+  }
+}
+const handleProcessForms = async () => {
+  if (!window.confirm("Voulez-vous vraiment lancer le traitement des demandes ?")) return;
+
+  try {
+    // Phase 1: Préparer (changer à 'en traitement')
+    const prepareRes = await fetch('http://localhost:5000/api/forms/prepare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!prepareRes.ok) throw new Error('Erreur lors de la préparation des formulaires');
+
+    // Optionally wait a few seconds (if needed)
+    await new Promise(resolve => setTimeout(resolve, 5000)); // 5 sec wait
+
+    // Phase 2: Traiter (calcul & note)
+    const res = await fetch('http://localhost:5000/api/forms/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Erreur lors du traitement');
+    }
+
+    const data = await res.json();
+    alert(data.message || 'Traitement terminé');
+
+    // Refresh demandes list
+    const demandesRes = await fetch('http://localhost:5000/api/demandes');
+    if (!demandesRes.ok) throw new Error('Erreur lors de la récupération des demandes');
+    const demandesData = await demandesRes.json();
+    setDemandes(demandesData);
+  } catch (err) {
+    console.error(err);
+    alert(`Erreur: ${err.message}`);
+  }
 };
 
 
@@ -174,7 +226,7 @@ export default function DemandeSejour() {
         }
 
         .page-wrapper {
-          max-width: 1100px;
+          max-width: 1500px;
           margin: 40px auto;
           padding: 0 20px;
         }
@@ -313,14 +365,42 @@ export default function DemandeSejour() {
           color: #555;
           font-weight: 600;
         }
+           .btn-delete {
+    background-color: #e53935; /* red */
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(229, 57, 53, 0.4);
+    transition: background-color 0.3s ease, transform 0.2s ease;
+  }
+  .btn-delete:hover {
+    background-color: #b71c1c;
+    transform: scale(1.05);
+  }
+  .btn-delete:active {
+    transform: scale(0.95);
+  }
+    .btn-process {
+  background-color: #1976d2; /* Blue */
+  color: white;
+}
+.btn-process:hover {
+  background-color: #115293;
+}
+
       `}</style>
 
       <div className="page-wrapper">
-        <div className="button-row">
-          <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
-          <button className="btn btn-csv" onClick={handleExportCSV}>Exporter EXCEL</button>
-          <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
-        </div>
+       <div className="button-row">
+  <button className="btn btn-process" onClick={handleProcessForms}>Lancer traitement</button>
+  <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
+  <button className="btn btn-csv" onClick={handleExportCSV}>Exporter EXCEL</button>
+  <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
+</div>
+
 
         <div className="container">
           <h1>Marsa Maroc / DEPL</h1>
@@ -331,41 +411,54 @@ export default function DemandeSejour() {
             <span>Catégorie : Agent</span>
             <span>Nombre de demandes : {demandes.length}</span>
           </div>
+<table>
+  <thead>
+    <tr>
+      <th>Matricule</th>
+      <th>Nom & Prénom</th>
+      <th>Date d'embauche</th>
+      <th>NES</th>
+      <th>Situation F</th>
+      <th>Choix 1</th>
+      <th>Période 1</th>
+      <th>Choix 2</th>
+      <th>Période 2</th>
+      <th>Choix 3</th>
+      <th>Période 3</th>
+      <th>Type de demande</th>
+      <th>Statut</th>
+      <th>Créé le</th>
+      <th>Modifié le</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {demandes.map((d, i) => (
+      <tr key={i}>
+        <td>{d.matricule}</td>
+        <td>{d.nom_complet}</td>
+        <td>{d.date_affectation_au_bureau || ''}</td>
+        <td>{d.nes || ''}</td>
+        <td>{d.situation_familiale || ''}</td>
+        <td>{d.premier_choix || ''}</td>
+        <td>{d.periode1 || ''}</td>
+        <td>{d.deuxieme_choix || ''}</td>
+        <td>{d.periode2 || ''}</td>
+        <td>{d.troisieme_choix || ''}</td>
+        <td>{d.periode3 || ''}</td>
+        <td>{d.demande_type || ''}</td>
+        <td>{d.statut || ''}</td>
+        <td>{d.cree_le || ''}</td>
+        <td>{d.modifie_le || ''}</td>
+        <td>
+  <button className="btn-delete" onClick={() => handleDelete(d.id)}>Supprimer</button>
+</td>
 
-          <table>
-            <thead>
-              <tr>
-                <th>Matricule</th>
-                <th>Nom & Prénom</th>
-                <th>Date d'embauche</th>
-                <th>NES</th>
-                <th>Situation F</th>
-                <th>Choix 1</th>
-                <th>Période 1</th>
-                <th>Choix 2</th>
-                <th>Période 2</th>
-                <th>Choix 3</th>
-                <th>Période 3</th>
-              </tr>
-            </thead>
-            <tbody>
-              {demandes.map((d, i) => (
-                <tr key={i}>
-                  <td>{d.matricule}</td>
-                  <td>{d.nomPrenom}</td>
-                  <td>{d.dateEmbauche}</td>
-                  <td>{d.nes}</td>
-                  <td>{d.situationF}</td>
-                  <td>{d.choix1}</td>
-                  <td>{d.periode1}</td>
-                  <td>{d.choix2}</td>
-                  <td>{d.periode2}</td>
-                  <td>{d.choix3}</td>
-                  <td>{d.periode3}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
 
           <div className="footer-bar">
             <span>Date d'impression : {today}</span>

@@ -1,20 +1,50 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom' // <-- ADD THIS
+import { useNavigate } from 'react-router-dom'
 import logo from '../assets/marsa-port.jpg'
 
 export default function Login() {
   const [fullname, setFullname] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const navigate = useNavigate() // <-- INITIALIZE NAVIGATE
+  const navigate = useNavigate()
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    // You can remove this alert later
-    // alert(`Connexion avec\nNom complet: ${fullname}\nMot de passe: ${password}`)
+  const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    navigate('/home') // <-- REDIRECT TO /home
+  try {
+    const response = await fetch("http://localhost:5000/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nom_complet: fullname, mot_de_passe: password }),
+    });
+
+    const data = await response.json();
+if (!response.ok) {
+  alert(data.error || "Erreur lors de la connexion");
+  return;
+}
+
+// Save user info in localStorage for persistence
+localStorage.setItem('user', JSON.stringify({
+  nom_complet: data.nom_complet,
+  matricule: data.matricule,
+}));
+
+    if (data.nom_complet.toLowerCase() === "admin") {
+      navigate("/admin");
+    } else {
+      navigate('/home', {
+        state: {
+          nom_complet: data.nom_complet,
+          matricule: data.matricule
+        }
+      });
+    }
+  } catch (error) {
+    alert("Erreur réseau : " + error.message);
   }
+};
+
 
   return (
     <>

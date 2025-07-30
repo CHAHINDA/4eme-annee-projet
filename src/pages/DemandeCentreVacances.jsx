@@ -1,5 +1,4 @@
-import { useState, useRef } from 'react'
-import { useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
 import logo from '../assets/marsa-port.jpg'
@@ -8,19 +7,23 @@ import html2canvas from 'html2canvas'
 export default function DemandeCentreVacances() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { type, campaign } = location.state || {}  // <-- changed here
+  const { type, campaign } = location.state || {}
+
+  // Load user from localStorage if not passed via route
+  const storedUser = JSON.parse(localStorage.getItem('user')) || {}
+  const matricule = location.state?.matricule || storedUser.matricule || ''
 
   const [saved, setSaved] = useState(false)
-  const [isPrinting, setIsPrinting] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false)
 
   const [formData, setFormData] = useState({
-    nom: '',
-    numSerie: '',
-    direction: '',
-    dateAffectation: '',
-    position: '',
-    situationFamiliale: '',
-    nombreEnfants: '',
+    nom_complet: '',
+    matricule: '',
+    direction: 'LAAYOUNE', // fixed, readonly
+    date_affectation_au_bureau: '',
+    role: '',
+    situation_familiale: '',
+    nombre_enfants_beneficiaires: '',
     telephone: '',
     premierChoix: '',
     deuxiemeChoix: '',
@@ -33,6 +36,40 @@ export default function DemandeCentreVacances() {
     periodeTroisiemeFin: '',
   })
 
+  useEffect(() => {
+    if (!matricule || matricule.trim() === '') {
+      console.warn('Matricule utilisateur manquant ou vide.')
+      alert("Matricule utilisateur manquant. Veuillez vous reconnecter.")
+      navigate('/login') // or your app’s safe fallback page
+      return
+    }
+
+    fetch(`http://localhost:5000/api/users/${encodeURIComponent(matricule)}`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Utilisateur non trouvé')
+        return res.json()
+      })
+      .then((user) => {
+        setFormData((prev) => ({
+          ...prev,
+          nom_complet: user.nom_complet || '',
+          matricule: user.matricule || '',
+          direction: 'LAAYOUNE',
+          date_affectation_au_bureau: user.date_affectation_au_bureau?.slice(0, 10) || '',
+          role: user.role || '',
+          situation_familiale: user.situation_familiale || '',
+          nombre_enfants_beneficiaires: user.nombre_enfants_beneficiaires || '',
+          telephone: user.telephone || '',
+        }))
+      })
+      .catch((err) => {
+        console.error('Erreur lors du chargement des données utilisateur :', err)
+        alert("Impossible de charger les informations de l'utilisateur.")
+        navigate('/home') // fallback on error
+      })
+  }, [matricule, navigate])
+
+
   // Use campaign.name if campaign exists, else 'Normal'
   const demandeType = type === 'campagne' && campaign ? campaign.name : 'Normal'
 
@@ -42,18 +79,18 @@ export default function DemandeCentreVacances() {
 
   const formRef = useRef(null)
 
-const handleChange = (e) => {
-  const { name, value, type: inputType } = e.target
-  if (inputType === 'radio') {
-    setFormData((prev) => ({ ...prev, position: value }))
-  } else {
-    setFormData((prev) => ({ ...prev, [name]: value }))
-    if (name.includes('Debut') || name.includes('Fin')) {
-      validateDate(value)
+  const handleChange = (e) => {
+    const { name, value, type: inputType } = e.target
+    if (inputType === 'radio') {
+  setFormData((prev) => ({ ...prev, role: value })); // ✅ fix here
+}
+ else {
+      setFormData((prev) => ({ ...prev, [name]: value }))
+      if (name.includes('Debut') || name.includes('Fin')) {
+        validateDate(value)
+      }
     }
   }
-}
-
 
   const handleEnregistrer = () => {
     setSaved(true)
@@ -131,60 +168,99 @@ const handleChange = (e) => {
       setIsPrinting(false);
     }
   };
+
   const [allCampaigns, setAllCampaigns] = useState([])
 
-useEffect(() => {
-  fetch('http://localhost:5000/api/periods')
-    .then(res => res.json())
-    .then(data => setAllCampaigns(data))
-    .catch(err => console.error('Erreur de chargement des périodes:', err))
-}, [])
-const validateDate = (dateStr) => {
-  const selected = new Date(dateStr);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  useEffect(() => {
+    fetch('http://localhost:5000/api/periods')
+      .then(res => res.json())
+      .then(data => setAllCampaigns(data))
+      .catch(err => console.error('Erreur de chargement des périodes:', err))
+  }, [])
 
-  if (selected < today) {
-    alert('❌ Cette date est déjà passée.');
-    navigate('/home');
+  const validateDate = (dateStr) => {
+    const selected = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (selected < today) {
+      alert('❌ Cette date est déjà passée.');
+      navigate('/home');
+      return false;
+    }
+
+    const matched = allCampaigns.find(({ start_date, end_date }) => {
+      const start = new Date(start_date);
+      const end = new Date(end_date);
+      return selected >= start && selected <= end;
+    });
+
+    if (type === 'normal') {
+      if (matched) {
+        alert(`❌ Cette date correspond à la campagne "${matched.name}". Veuillez aller dans la section campagne.`);
+        navigate('/home');
+        return false;
+      }
+      return true;
+    }
+
+    if (type === 'campagne') {
+      if (!matched) {
+        alert('❌ Vous devez aller à la section normale pour cette période.');
+        navigate('/home');
+        return false;
+      }
+
+      if (matched.name !== campaign?.name) {
+        alert(`❌ Cette date correspond à "${matched.name}". Veuillez changer de campagne.`);
+        navigate('/home');
+        return false;
+      }
+
+      return true;
+    }
+
     return false;
+  };
+  const handleSave = async () => {
+  setIsPrinting(true); // optionally disable button while saving
+
+  const payload = {
+    matricule: formData.matricule,
+    premier_choix: formData.premierChoix,
+    deuxieme_choix: formData.deuxiemeChoix,
+    troisieme_choix: formData.troisiemeChoix,
+    periode_premier_debut: formData.periodePremierDebut,
+    periode_premier_fin: formData.periodePremierFin,
+    periode_deuxieme_debut: formData.periodeDeuxiemeDebut,
+    periode_deuxieme_fin: formData.periodeDeuxiemeFin,
+    periode_troisieme_debut: formData.periodeTroisiemeDebut,
+    periode_troisieme_fin: formData.periodeTroisiemeFin,
+    demande_type: type || '',  // you can adjust this if needed
+    statut: 'En attente',
+  };
+
+  try {
+    const response = await fetch('http://localhost:5000/api/forms', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) throw new Error('Erreur lors de l\'enregistrement');
+
+    const data = await response.json();
+    setSaved(true);
+    alert('Enregistrement réussi !');
+  } catch (error) {
+    console.error(error);
+    alert('Erreur lors de l\'enregistrement.');
+  } finally {
+    setIsPrinting(false);
   }
-
-  // Find matching campaign (if any)
-  const matched = allCampaigns.find(({ start_date, end_date }) => {
-    const start = new Date(start_date);
-    const end = new Date(end_date);
-    return selected >= start && selected <= end;
-  });
-
-  if (type === 'normal') {
-    if (matched) {
-      alert(`❌ Cette date correspond à la campagne "${matched.name}". Veuillez aller dans la section campagne.`);
-      navigate('/home');
-      return false;
-    }
-    return true; // ✅ Date is outside campaigns, so allowed in normal
-  }
-
-  if (type === 'campagne') {
-    if (!matched) {
-      alert('❌ Vous devez aller à la section normale pour cette période.');
-      navigate('/home');
-      return false;
-    }
-
-    if (matched.name !== campaign?.name) {
-      alert(`❌ Cette date correspond à "${matched.name}". Veuillez changer de campagne.`);
-      navigate('/home');
-      return false;
-    }
-
-    return true; // ✅ Date is inside the correct campaign
-  }
-
-  return false;
 };
-
 
 
   return (
@@ -468,11 +544,16 @@ const validateDate = (dateStr) => {
   ref={formRef}
 >
 
-    <div className="return-wrapper no-print">
-        <button className="return-btn" onClick={() => navigate('/home')}>
-          ← Retour à l'accueil
-        </button>
-      </div>
+  <div className="return-wrapper no-print">
+  <button className="return-btn" onClick={() => navigate('/home')}>
+    ← Retour à l'accueil
+  </button>
+</div>
+<div style={{ marginTop: '8px' }}>
+    <span>Matricule: {matricule}</span>
+  </div>
+
+
 
       <div className="header-container">
         <div className="logo-container">
@@ -497,69 +578,137 @@ const validateDate = (dateStr) => {
 
           {/* Box 1 */}
           <div className="form-box only-print">
-            <div className="form-title">Informations sur le (la) bénéficiaire :</div>
+          <div className="form-title">Informations sur le (la) bénéficiaire :</div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="nom">Nom et Prénom</label>
-                <input id="nom" type="text" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="numSerie">Matricule</label>
-                <input id="numSerie" type="text" />
-              </div>
-            </div>
+<div className="form-row">
+  <div className="form-group">
+    <label htmlFor="nom">Nom et Prénom</label>
+    <input
+      id="nom"
+      type="text"
+      name="nom_complet"
+      value={formData.nom_complet}
+      onChange={handleChange}
+      readOnly
+    />
+  </div>
+  <div className="form-group">
+    <label htmlFor="numSerie">Matricule</label>
+    <input
+      id="numSerie"
+      type="text"
+      name="matricule"
+      value={formData.matricule}
+      onChange={handleChange}
+      readOnly
+    />
+  </div>
+</div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="direction">Direction</label>
-                <input id="direction" type="text" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="dateAffectation">Date d’affectation au bureau</label>
-                <input id="dateAffectation" type="date" />
-              </div>
-            </div>
+<div className="form-row">
+  <div className="form-group">
+    <label htmlFor="direction">Direction</label>
+    <input
+      id="direction"
+      type="text"
+      name="direction"
+      value="LAAYOUNE"
+      readOnly
+    />
+  </div>
+  <div className="form-group">
+    <label htmlFor="dateAffectation">Date d’affectation au bureau</label>
+    <input
+      id="dateAffectation"
+      type="date"
+      name="date_affectation_au_bureau"
+      value={formData.date_affectation_au_bureau}
+      onChange={handleChange}
+    />
+  </div>
+</div>
 
-            <div className="form-row">
-              
-              <div className="radio-group">
-                <label className="radio-item">
-                  <input type="radio" name="position" value="execution" />
-                  Exécution
-                </label>
-                <label className="radio-item">
-                  <input type="radio" name="position" value="encadrement" />
-                  Encadrement
-                </label>
-                <label className="radio-item">
-                  <input type="radio" name="position" value="cadres" />
-                  Cadres
-                </label>
-                <label className="radio-item">
-                  <input type="radio" name="position" value="cadresSup" />
-                  Cadres Supérieurs
-                </label>
-              </div>
-            </div>
+<div className="form-row">
+  <div className="radio-group">
+    <label className="radio-item">
+      <input
+        type="radio"
+        name="role"
+        value="Execution"
+        checked={formData.role === "Execution"}
+        onChange={handleChange}
+      />
+      Exécution
+    </label>
+    <label className="radio-item">
+      <input
+        type="radio"
+        name="role"
+        value="Superviseur"
+        checked={formData.role === "Superviseur"}
+        onChange={handleChange}
+      />
+      Superviseur
+    </label>
+    <label className="radio-item">
+      <input
+        type="radio"
+        name="role"
+        value="Cadres"
+        checked={formData.role === "Cadres"}
+        onChange={handleChange}
+      />
+      Cadres
+    </label>
+    <label className="radio-item">
+      <input
+        type="radio"
+        name="role"
+        value="Cadres superieur"
+        checked={formData.role === "Cadres superieur"}
+        onChange={handleChange}
+      />
+      Cadres Supérieurs
+    </label>
+  </div>
+</div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="situationFamiliale">Situation familiale</label>
-                <input id="situationFamiliale" type="text" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="nombreEnfants">Nombre d’enfants bénéficiaires</label>
-                <input id="nombreEnfants" type="text" />
-              </div>
-            </div>
+<div className="form-row">
+  <div className="form-group">
+    <label htmlFor="situationFamiliale">Situation familiale</label>
+    <input
+      id="situationFamiliale"
+      type="text"
+      name="situation_familiale"
+      value={formData.situation_familiale}
+      onChange={handleChange}
+    />
+  </div>
+  <div className="form-group">
+    <label htmlFor="nombreEnfants">Nombre d’enfants bénéficiaires</label>
+    <input
+      id="nombreEnfants"
+      type="text"
+      name="nombre_enfants_beneficiaires"
+      value={formData.nombre_enfants_beneficiaires}
+      onChange={handleChange}
+    />
+  </div>
+</div>
 
-            <div className="form-row">
-              <div className="form-group" style={{ flex: '1 1 100%' }}>
-                <label htmlFor="telephone">Téléphone</label>
-                <input id="telephone" type="text" />
-              </div>
-            </div>
+<div className="form-row">
+  <div className="form-group" style={{ flex: '1 1 100%' }}>
+    <label htmlFor="telephone">Téléphone</label>
+    <input
+      id="telephone"
+      type="text"
+      name="telephone"
+      value={formData.telephone}
+      onChange={handleChange}
+    />
+  </div>
+</div>
+
           </div>
 
             {/* Box 2 with modified table */}
@@ -721,26 +870,27 @@ const validateDate = (dateStr) => {
         </div>
         </div>
        <div className="no-print" style={{ textAlign: 'center', marginTop: '30px' }}>
-      {!saved ? (
-        <button
-          onClick={() => setSaved(true)}
-          style={{
-            backgroundColor: '#007acc',
-            color: 'white',
-            padding: '12px 24px',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '1rem',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'background-color 0.3s ease',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#005fa3')}
-          onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#007acc')}
-          disabled={isPrinting}
-        >
-          Enregistrer
-        </button>
+  {!saved ? (
+    <button
+      onClick={handleSave}
+      style={{
+        backgroundColor: '#007acc',
+        color: 'white',
+        padding: '12px 24px',
+        borderRadius: '8px',
+        border: 'none',
+        fontSize: '1rem',
+        fontWeight: '600',
+        cursor: 'pointer',
+        transition: 'background-color 0.3s ease',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#005fa3')}
+      onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#007acc')}
+      disabled={isPrinting}
+    >
+      Enregistrer
+    </button>
+
       ) : (
         <button
           onClick={handleImprimer}

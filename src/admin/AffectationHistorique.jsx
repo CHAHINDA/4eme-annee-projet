@@ -1,14 +1,56 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
 export default function AffectationHistorique() {
   const navigate = useNavigate()
-  const today = new Date().toLocaleDateString('fr-FR')
+  const today = new Date()
+  const todayStr = today.toLocaleDateString('fr-FR')
 
-  // Empty data for now - will fetch from backend later
-  const records = []
+  const currentYear = today.getFullYear()
+  const year1 = currentYear - 1
+  const year2 = currentYear
+
+  const col1 = `A${year1.toString().slice(-2)}` // e.g. "A23"
+  const col2 = `A${year2.toString().slice(-2)}` // e.g. "A24"
+
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true)
+        setError(null)
+        const res = await fetch('/api/demandes?statut=en traite')
+        if (!res.ok) throw new Error(`Erreur HTTP: ${res.status}`)
+        let data = await res.json()
+
+        // Defensive: ensure data is an array
+        if (!Array.isArray(data)) {
+          throw new Error('Les données reçues ne sont pas un tableau')
+        }
+
+        // Defensive: ensure note is number for sorting; fallback to 0 if missing or NaN
+        data.sort((a, b) => {
+          const noteA = Number(a.note)
+          const noteB = Number(b.note)
+          if (isNaN(noteA)) return 1
+          if (isNaN(noteB)) return -1
+          return noteB - noteA
+        })
+
+        setRecords(data)
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
 
   const handleRetour = () => {
     navigate('/admin')
@@ -16,40 +58,45 @@ export default function AffectationHistorique() {
 
   const handleExportCSV = () => {
     const headers = [
+      'Rank',
       'Mat',
       'Nom',
       'Situation',
       'Nbr. Enfant',
       'An. Recrut.',
-      'A20',
-      'A21',
-      'A22',
-      'A24',
+      col1,
+      col2,
       'Note',
     ]
 
-    const rows = records.map(r => [
-      r.mat,
-      r.nom,
-      r.situation,
-      r.nbrEnfant,
-      r.anRecrut,
-      r.A20,
-      r.A21,
-      r.A22,
-      r.A24,
-      r.note,
+    const rows = records.map((r, idx) => [
+      idx + 1,
+      r.matricule || r.mat || '',
+      r.nom_complet || r.nom || '',
+      r.situation_familiale || r.situation || '',
+      r.nombre_enfants_beneficiaires ?? r.nbrEnfant ?? '',
+      r.date_affectation_au_bureau
+        ? new Date(r.date_affectation_au_bureau).getFullYear()
+        : r.anRecrut || '',
+      // Use empty string if col key missing
+      r[col1] != null ? r[col1] : '',
+      r[col2] != null ? r[col2] : '',
+      r.note != null ? r.note : '',
     ])
 
+    // Escape fields for CSV and join with semicolon
+    const escapeCSV = field =>
+      `"${String(field).replace(/"/g, '""')}"`
+
     const csvContent =
-      '\uFEFF' + // UTF-8 BOM for Excel compatibility with accents
-      [headers.join(';'), ...rows.map(row => row.map(field => `"${field}"`).join(';'))].join('\r\n')
+      '\uFEFF' + // UTF-8 BOM for Excel accents
+      [headers.join(';'), ...rows.map(row => row.map(escapeCSV).join(';'))].join('\r\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', `historique_affectation_${today.replace(/\//g, '-')}.csv`)
+    link.setAttribute('download', `historique_affectation_${todayStr.replace(/\//g, '-')}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -67,34 +114,32 @@ export default function AffectationHistorique() {
     doc.text("ETAT D'HISTORIQUE D'AFFECTATION", pageWidth / 2, 15, { align: 'center' })
     doc.setFontSize(10)
     doc.text(`Port : DEPL`, pageWidth / 2, 22, { align: 'center' })
-    doc.text(`Date d'impression: ${today}`, 14, 30)
+    doc.text(`Date d'impression: ${todayStr}`, 14, 30)
 
-    const headers = [
-      [
-        'Mat',
-        'Nom',
-        'Situation',
-        'Nbr. Enfant',
-        'An. Recrut.',
-        'A20',
-        'A21',
-        'A22',
-        'A24',
-        'Note',
-      ],
-    ]
+    const headers = [[
+      'Rank',
+      'Mat',
+      'Nom',
+      'Situation',
+      'Nbr. Enfant',
+      'An. Recrut.',
+      col1,
+      col2,
+      'Note',
+    ]]
 
-    const rows = records.map(r => [
-      r.mat,
-      r.nom,
-      r.situation,
-      r.nbrEnfant?.toString() || '',
-      r.anRecrut?.toString() || '',
-      r.A20 || '',
-      r.A21 || '',
-      r.A22 || '',
-      r.A24 || '',
-      r.note || '',
+    const rows = records.map((r, idx) => [
+      idx + 1,
+      r.matricule || r.mat || '',
+      r.nom_complet || r.nom || '',
+      r.situation_familiale || r.situation || '',
+      r.nombre_enfants_beneficiaires ?? r.nbrEnfant ?? '',
+      r.date_affectation_au_bureau
+        ? new Date(r.date_affectation_au_bureau).getFullYear()
+        : r.anRecrut || '',
+      r[col1] != null ? r[col1] : '',
+      r[col2] != null ? r[col2] : '',
+      r.note != null ? r.note : '',
     ])
 
     autoTable(doc, {
@@ -117,7 +162,7 @@ export default function AffectationHistorique() {
       theme: 'grid',
     })
 
-    doc.save(`historique_affectation_${today.replace(/\//g, '-')}.pdf`)
+    doc.save(`historique_affectation_${todayStr.replace(/\//g, '-')}.pdf`)
   }
 
   return (
@@ -256,7 +301,7 @@ export default function AffectationHistorique() {
         }
       `}</style>
 
-      <div className="page-wrapper">
+       <div className="page-wrapper">
         <div className="button-row">
           <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
           <button className="btn btn-csv" onClick={handleExportCSV}>Exporter CSV</button>
@@ -269,49 +314,53 @@ export default function AffectationHistorique() {
           <h2>Port : DEPL</h2>
           <hr />
 
-          <table>
-            <thead>
-              <tr>
-                <th>Mat</th>
-                <th>Nom</th>
-                <th>Situation</th>
-                <th>Nbr. Enfant</th>
-                <th>An. Recrut.</th>
-                <th>A20</th>
-                <th>A21</th>
-                <th>A22</th>
-                <th>A24</th>
-                <th>Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.length === 0 ? (
+          {loading ? (
+            <p style={{ textAlign: 'center', padding: 20 }}>Chargement...</p>
+          ) : error ? (
+            <p style={{ textAlign: 'center', color: 'red', padding: 20 }}>Erreur: {error}</p>
+          ) : records.length === 0 ? (
+            <p style={{ textAlign: 'center', padding: 20, fontStyle: 'italic', color: '#555' }}>
+              Aucun enregistrement trouvé — table vide.
+            </p>
+          ) : (
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan="10" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                    Table vide
-                  </td>
+                  <th>Rank</th>
+                  <th>Mat</th>
+                  <th>Nom</th>
+                  <th>Situation</th>
+                  <th>Nbr. Enfant</th>
+                  <th>An. Recrut.</th>
+                  <th>{col1}</th>
+                  <th>{col2}</th>
+                  <th>Note</th>
                 </tr>
-              ) : (
-                records.map((rec, idx) => (
-                  <tr key={idx}>
-                    <td>{rec.mat}</td>
-                    <td>{rec.nom}</td>
-                    <td>{rec.situation}</td>
-                    <td>{rec.nbrEnfant}</td>
-                    <td>{rec.anRecrut}</td>
-                    <td>{rec.A20}</td>
-                    <td>{rec.A21}</td>
-                    <td>{rec.A22}</td>
-                    <td>{rec.A24}</td>
-                    <td>{rec.note}</td>
+              </thead>
+              <tbody>
+                {records.map((rec, idx) => (
+                  <tr key={rec.id || idx}>
+                    <td>{idx + 1}</td>
+                    <td>{rec.matricule || rec.mat || ''}</td>
+                    <td>{rec.nom_complet || rec.nom || ''}</td>
+                    <td>{rec.situation_familiale || rec.situation || ''}</td>
+                    <td>{rec.nombre_enfants_beneficiaires ?? rec.nbrEnfant ?? ''}</td>
+                    <td>
+                      {rec.date_affectation_au_bureau
+                        ? new Date(rec.date_affectation_au_bureau).getFullYear()
+                        : rec.anRecrut || ''}
+                    </td>
+                    <td>{rec[col1] != null ? rec[col1] : ''}</td>
+                    <td>{rec[col2] != null ? rec[col2] : ''}</td>
+                    <td>{rec.note != null ? rec.note : ''}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          )}
 
           <div className="footer-bar">
-            <span>Date d'aujourd'hui : {today}</span>
+            <span>Date d'aujourd'hui : {todayStr}</span>
             <span>Page 1</span>
           </div>
         </div>
