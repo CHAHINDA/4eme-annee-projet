@@ -447,97 +447,172 @@ app.post('/api/forms/prepare', async (req, res) => {
     res.status(500).json({ error: "Erreur lors du passage en traitement." });
   }
 });
+app.post('/api/forms/reset', async (req, res) => {
+  try {
+    const currentYear = new Date().getFullYear().toString();
+
+    // 1. Reset statut to 'En attente' and note to 0 for forms currently 'valide' or 'en traitement'
+    await pool.query(`
+      UPDATE forms
+      SET statut = 'En attente', note = 0
+      WHERE statut IN ('valide', 'en traitement')
+    `);
+
+    // 2. Delete benefit_history entries for these forms' matricules in current year
+    // First, get matricules of forms that were reset
+    const { rows: matriculesRows } = await pool.query(`
+      SELECT DISTINCT matricule
+      FROM forms
+      WHERE statut = 'En attente'
+    `);
+
+    const matricules = matriculesRows.map(row => row.matricule);
+
+    if (matricules.length > 0) {
+      // Delete benefit_history for these matricules and current year
+      await pool.query(
+        `DELETE FROM benefit_history WHERE matricule = ANY($1) AND benefit_year = $2`,
+        [matricules, currentYear]
+      );
+    }
+
+    res.json({ message: 'Tous les formulaires ont été remis en "En attente" et l\'historique a été supprimé.' });
+  } catch (error) {
+    console.error('Erreur dans /forms/reset:', error);
+    res.status(500).json({ error: 'Erreur lors de la remise à zéro.' });
+  }
+});
+
+
 
 app.post('/api/forms/process', async (req, res) => {
   try {
-    // Get forms currently in 'en traitement'
-    const { rows: forms } = await pool.query("SELECT * FROM forms WHERE statut = 'en traitement'");
+    // 1️⃣ Get all forms with statut 'en traitement'
+    const { rows: forms } = await pool.query(
+      "SELECT * FROM forms WHERE statut = 'en traitement'"
+    );
 
-    const scores = [];
+    const MAX_KIDS = 8;
+    const BASE_MARRIED_SCORE = 10;
+    const MAX_RAW_SCORE = BASE_MARRIED_SCORE + MAX_KIDS;
 
+    const currentYear = new Date().getFullYear().toString();
+
+    // Store results for later ranking
+    let processedForms = [];
+
+    // 2️⃣ Calculate note for everyone
     for (const form of forms) {
-      // Get user info
       const { rows: userData } = await pool.query(
-        'SELECT * FROM users WHERE matricule = $1',
+        "SELECT * FROM users WHERE matricule = $1",
         [form.matricule]
       );
       const user = userData[0];
 
-      // Get benefit history for 2023 and 2024
-      const { rows: history } = await pool.query(
+      const { rows: historyData } = await pool.query(
         "SELECT benefit_year FROM benefit_history WHERE matricule = $1",
         [form.matricule]
       );
-      const years = history.map(h => h.benefit_year);
+      const years = historyData.map(h => h.benefit_year);
 
-      let note = 0;
+      let rawScore = 0;
+      let benefitMultiplier = 1;
 
-      if (user.situation_familiale === 'Célibataire') {
-        note = 0; // instantly excluded
-      } else if (user.situation_familiale === 'Marié(e)') {
-        note = parseInt(user.nombre_enfants_beneficiaires || 0);
+      const had2023 = years.includes("2023");
+      const had2024 = years.includes("2024");
 
-        const had2023 = years.includes('2023');
-        const had2024 = years.includes('2024');
-
-        if (had2023 && had2024) {
-          note += 0;
-        } else if (had2023 && !had2024) {
-          note += 1;
-        } else if (!had2023 && had2024) {
-          note += 2;
-        } else {
-          note += 3;
-        }
+      if (had2023 && had2024) {
+        benefitMultiplier = 0.17;
+      } else if (had2023 && !had2024) {
+        benefitMultiplier = 0.5;
+      } else if (!had2023 && had2024) {
+        benefitMultiplier = 0.25;
+      } else {
+        benefitMultiplier = 1;
       }
 
-      scores.push({ id: form.id, matricule: form.matricule, note });
-    }
-
-    // Select top 5 winners (score > 0)
-    const topWinners = scores
-      .filter(f => f.note > 0)
-      .sort((a, b) => b.note - a.note)
-      .slice(0, 5);
-
-    const winnerIds = topWinners.map(f => f.id);
-
-    // Update winners statut = 'valide'
-    if (winnerIds.length > 0) {
-      await pool.query(
-        "UPDATE forms SET statut = 'valide' WHERE id = ANY($1::int[])",
-        [winnerIds]
-      );
-    }
-
-    // Update other forms still 'en traitement'
-    await pool.query(
-      "UPDATE forms SET statut = 'en traitement' WHERE statut = 'en traitement' AND id != ALL($1::int[])",
-      [winnerIds]
-    );
-
-    // Insert or update benefit_history for winners with their note and current year
-    const currentYear = new Date().getFullYear().toString();
-
-    for (const winner of topWinners) {
-      // Check if benefit_history record exists for matricule and year
-      const { rows: existing } = await pool.query(
-        "SELECT id FROM benefit_history WHERE matricule = $1 AND benefit_year = $2",
-        [winner.matricule, currentYear]
-      );
-
-      if (existing.length > 0) {
-        // Update existing note
-        await pool.query(
-          "UPDATE benefit_history SET note = $1, created_at = NOW() WHERE id = $2",
-          [winner.note, existing[0].id]
-        );
+      if (user.situation_familiale === "Marié(e)") {
+        const kids = parseInt(user.nombre_enfants_beneficiaires || 0);
+        rawScore = kids > 0 ? BASE_MARRIED_SCORE + kids : 0;
       } else {
-        // Insert new record
-        await pool.query(
-          "INSERT INTO benefit_history (matricule, benefit_year, note, created_at) VALUES ($1, $2, $3, NOW())",
-          [winner.matricule, currentYear, winner.note]
-        );
+        rawScore = 0;
+      }
+
+      const note = Math.min(
+        100,
+        Math.round((rawScore / MAX_RAW_SCORE) * 100 * benefitMultiplier)
+      );
+
+      processedForms.push({
+        form,
+        user,
+        note
+      });
+    }
+
+    // 3️⃣ Group forms by (premier_choix, periode_premier_debut)
+    const groups = {};
+    for (const pf of processedForms) {
+      const centre = pf.form.premier_choix || "unknown_centre";
+      const startDate = pf.form.periode_premier_debut; // Date string
+      const key = `${centre}_${startDate}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(pf);
+    }
+
+    // 4️⃣ Decide winners in each group
+    for (const key in groups) {
+      const group = groups[key];
+
+      // Sort by highest note desc, then earliest date_affectation_au_bureau asc
+      group.sort((a, b) => {
+        if (b.note !== a.note) return b.note - a.note;
+        return new Date(a.user.date_affectation_au_bureau) - new Date(b.user.date_affectation_au_bureau);
+      });
+
+      for (let i = 0; i < group.length; i++) {
+        const { form, user, note } = group[i];
+
+        // Extract month (0 = Jan, 5 = June, etc.) from periode_premier_debut
+        const monthNum = new Date(form.periode_premier_debut).getMonth();
+
+        // Célibataire summer exclusion June (5), July (6), August (7)
+        const isSummerCeli =
+          user.situation_familiale.toLowerCase() === "célibataire" &&
+          [5, 6, 7].includes(monthNum);
+
+        let newStatut = "en traitement";
+        if (!isSummerCeli && i === 0) {
+          newStatut = "valide";
+        }
+
+        // Update statut in forms
+        // Update statut and note in forms
+await pool.query(
+  "UPDATE forms SET statut = $1, note = $2 WHERE id = $3",
+  [newStatut, note, form.id]
+);
+
+
+        // Update benefit_history only if valide
+        if (newStatut === "valide") {
+          const { rows: existing } = await pool.query(
+            "SELECT id FROM benefit_history WHERE matricule = $1 AND benefit_year = $2",
+            [form.matricule, currentYear]
+          );
+
+          if (existing.length > 0) {
+            await pool.query(
+              "UPDATE benefit_history SET note = $1, created_at = NOW() WHERE id = $2",
+              [note, existing[0].id]
+            );
+          } else {
+            await pool.query(
+              "INSERT INTO benefit_history (matricule, benefit_year, note, created_at) VALUES ($1, $2, $3, NOW())",
+              [form.matricule, currentYear, note]
+            );
+          }
+        }
       }
     }
 
@@ -547,6 +622,82 @@ app.post('/api/forms/process', async (req, res) => {
     res.status(500).json({ error: "Erreur lors du traitement final." });
   }
 });
+
+
+
+
+app.get('/api/forms/historique', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        f.matricule,
+        u.nom_complet,
+        u.situation_familiale,
+        u.nombre_enfants_beneficiaires,
+        u.date_affectation_au_bureau,
+        u.role,
+        f.statut,
+        f.note,
+        COALESCE(
+          (
+            SELECT json_agg(j ORDER BY (j->>'year')::int DESC)
+            FROM (
+              SELECT DISTINCT jsonb_build_object('year', bh2.benefit_year) AS j
+              FROM benefit_history bh2
+              WHERE bh2.matricule = f.matricule AND bh2.benefit_year IS NOT NULL
+            ) sub
+          ),
+          '[]'
+        ) AS benefit_years
+      FROM forms f
+      LEFT JOIN users u ON f.matricule = u.matricule
+      WHERE f.statut IN ('valide', 'en traitement')
+      GROUP BY f.matricule, u.nom_complet, u.situation_familiale, 
+               u.nombre_enfants_beneficiaires, u.date_affectation_au_bureau, 
+               u.role, f.statut, f.note
+      ORDER BY u.nom_complet
+    `);
+
+    const merged = result.rows.map(row => {
+      const user = {
+        matricule: row.matricule,
+        nom_complet: row.nom_complet,
+        situation_familiale: row.situation_familiale,
+        nombre_enfants_beneficiaires: row.nombre_enfants_beneficiaires,
+        date_affectation_au_bureau: row.date_affectation_au_bureau,
+        role: row.role,
+        statut: row.statut,
+        note: row.note ?? 0
+      };
+
+      row.benefit_years.forEach(entry => {
+        if (entry.year) {
+          const suffix = `A${String(entry.year).slice(-2)}`;
+          user[suffix] = '✔️';
+        }
+      });
+
+      return user;
+    });
+
+    res.json(merged);
+  } catch (error) {
+    console.error('Erreur dans /api/forms/historique:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de récupération historique' });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

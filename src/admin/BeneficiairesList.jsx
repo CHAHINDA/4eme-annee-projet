@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -6,27 +6,77 @@ import autoTable from 'jspdf-autotable'
 export default function BeneficiairesList() {
   const navigate = useNavigate()
   const today = new Date().toLocaleDateString('fr-FR')
+  const [beneficiaries, setBeneficiaries] = useState([])
 
-  // Empty data array for future backend data
-  const beneficiaries = []
-
-  const handleRetour = () => {
-    navigate('/admin')
+function formatPeriod(start, end) {
+  if (!start || !end) return ''
+  try {
+    const options = { day: '2-digit', month: '2-digit', year: 'numeric' }
+    const s = new Date(start).toLocaleDateString('fr-FR', options)
+    const e = new Date(end).toLocaleDateString('fr-FR', options)
+    return `${s} - ${e}`
+  } catch {
+    return ''
   }
+}
+
+useEffect(() => {
+  fetch('http://localhost:5000/api/demandes')
+    .then(res => res.json())
+    .then(data => {
+      console.log('API data:', data)
+
+      const filtered = data.filter(d => d.statut?.toLowerCase() === 'valide')
+      console.log('Filtered valid:', filtered)
+
+      const rows = []
+      filtered.forEach(d => {
+        if (d.premier_choix && d.periode1) {
+          rows.push({
+            mat: d.matricule,
+            nomPrenom: d.nom_complet,
+            centreAffecte: d.premier_choix,
+            periodeAffectee: d.periode1,
+          })
+        }
+        if (d.deuxieme_choix && d.periode2) {
+          rows.push({
+            mat: d.matricule,
+            nomPrenom: d.nom_complet,
+            centreAffecte: d.deuxieme_choix,
+            periodeAffectee: d.periode2,
+          })
+        }
+        if (d.troisieme_choix && d.periode3) {
+          rows.push({
+            mat: d.matricule,
+            nomPrenom: d.nom_complet,
+            centreAffecte: d.troisieme_choix,
+            periodeAffectee: d.periode3,
+          })
+        }
+      })
+
+      console.log('Final rows:', rows)
+      setBeneficiaries(rows)
+    })
+    .catch(err => {
+      console.error('Fetch error:', err)
+      setBeneficiaries([])
+    })
+}, [])
+
+
+
+
+  const handleRetour = () => navigate('/admin')
 
   const handleExportCSV = () => {
     const headers = ['Mat', 'Nom et Prénom', 'Centre affecté', 'Période affectée']
-    const rows = beneficiaries.map(b => [
-      b.mat,
-      b.nomPrenom,
-      b.centreAffecte,
-      b.periodeAffectee,
-    ])
-
+    const rows = beneficiaries.map(b => [b.mat, b.nomPrenom, b.centreAffecte, b.periodeAffectee])
     const csvContent =
-      '\uFEFF' + // UTF-8 BOM
-      [headers.join(';'), ...rows.map(row => row.map(field => `"${field}"`).join(';'))].join('\r\n')
-
+      '\uFEFF' +
+      [headers.join(';'), ...rows.map(row => row.map(f => `"${f}"`).join(';'))].join('\r\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -38,12 +88,7 @@ export default function BeneficiairesList() {
   }
 
   const handleExportPDF = () => {
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4',
-    })
-
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
     const pageWidth = doc.internal.pageSize.getWidth()
     doc.setFontSize(16)
     doc.text('LISTE DE BENEFICIAIRES', pageWidth / 2, 15, { align: 'center' })
@@ -52,34 +97,16 @@ export default function BeneficiairesList() {
     doc.setFontSize(10)
     doc.text(`Date d'impression: ${today}`, 14, 30)
 
-    const headers = [['Mat', 'Nom et Prénom', 'Centre affecté', 'Période affectée']]
-    const rows = beneficiaries.map(b => [
-      b.mat,
-      b.nomPrenom,
-      b.centreAffecte,
-      b.periodeAffectee,
-    ])
-
     autoTable(doc, {
       startY: 35,
-      head: headers,
-      body: rows,
-      styles: {
-        fontSize: 9,
-        cellPadding: 2,
-      },
-      headStyles: {
-        fillColor: [0, 122, 204],
-        textColor: 255,
-        halign: 'center',
-      },
-      bodyStyles: {
-        halign: 'center',
-      },
+      head: [['Mat', 'Nom et Prénom', 'Centre affecté', 'Période affectée']],
+      body: beneficiaries.map(b => [b.mat, b.nomPrenom, b.centreAffecte, b.periodeAffectee]),
+      styles: { fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [0, 122, 204], textColor: 255, halign: 'center' },
+      bodyStyles: { halign: 'center' },
       margin: { top: 35, bottom: 20 },
       theme: 'grid',
     })
-
     doc.save(`beneficiaires_${today.replace(/\//g, '-')}.pdf`)
   }
 

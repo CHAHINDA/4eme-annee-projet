@@ -9,31 +9,30 @@ export default function AffectationHistorique() {
   const todayStr = today.toLocaleDateString('fr-FR')
 
   const currentYear = today.getFullYear()
-  const year1 = currentYear - 1
-  const year2 = currentYear
-
-  const col1 = `A${year1.toString().slice(-2)}` // e.g. "A23"
-  const col2 = `A${year2.toString().slice(-2)}` // e.g. "A24"
+  const year1 = currentYear - 2
+  const year2 = currentYear - 1
+  const col1 = `A${year1.toString().slice(-2)}`
+  const col2 = `A${year2.toString().slice(-2)}`
 
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  const [currentPage, setCurrentPage] = useState(1)
+  const recordsPerPage = 5
+
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true)
-        setError(null)
-        const res = await fetch('/api/demandes?statut=en traite')
+        const res = await fetch('http://localhost:5000/api/forms/historique')
         if (!res.ok) throw new Error(`Erreur HTTP: ${res.status}`)
-        let data = await res.json()
+        const data = await res.json()
 
-        // Defensive: ensure data is an array
         if (!Array.isArray(data)) {
           throw new Error('Les données reçues ne sont pas un tableau')
         }
 
-        // Defensive: ensure note is number for sorting; fallback to 0 if missing or NaN
         data.sort((a, b) => {
           const noteA = Number(a.note)
           const noteB = Number(b.note)
@@ -52,44 +51,34 @@ export default function AffectationHistorique() {
     fetchData()
   }, [])
 
-  const handleRetour = () => {
-    navigate('/admin')
-  }
+  const totalPages = Math.ceil(records.length / recordsPerPage)
+  const indexOfLastRecord = currentPage * recordsPerPage
+  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage
+  const currentRecords = records.slice(indexOfFirstRecord, indexOfLastRecord)
+
+  const goToPreviousPage = () => setCurrentPage(prev => Math.max(prev - 1, 1))
+  const goToNextPage = () => setCurrentPage(prev => Math.min(prev + 1, totalPages))
+
+  const handleRetour = () => navigate('/admin')
 
   const handleExportCSV = () => {
-    const headers = [
-      'Rank',
-      'Mat',
-      'Nom',
-      'Situation',
-      'Nbr. Enfant',
-      'An. Recrut.',
-      col1,
-      col2,
-      'Note',
-    ]
+    const headers = ['Rank', 'Mat', 'Nom', 'Situation', 'Nbr. Enfant', 'An. Recrut.', col1, col2, 'Note']
 
     const rows = records.map((r, idx) => [
       idx + 1,
-      r.matricule || r.mat || '',
-      r.nom_complet || r.nom || '',
-      r.situation_familiale || r.situation || '',
-      r.nombre_enfants_beneficiaires ?? r.nbrEnfant ?? '',
-      r.date_affectation_au_bureau
-        ? new Date(r.date_affectation_au_bureau).getFullYear()
-        : r.anRecrut || '',
-      // Use empty string if col key missing
-      r[col1] != null ? r[col1] : '',
-      r[col2] != null ? r[col2] : '',
-      r.note != null ? r.note : '',
+      r.matricule || '',
+      r.nom_complet || '',
+      r.situation_familiale || '',
+      r.nombre_enfants_beneficiaires ?? '',
+      r.date_affectation_au_bureau ? new Date(r.date_affectation_au_bureau).getFullYear() : '',
+      r[col1] ?? '',
+      r[col2] ?? '',
+      r.note ?? '-',
     ])
 
-    // Escape fields for CSV and join with semicolon
-    const escapeCSV = field =>
-      `"${String(field).replace(/"/g, '""')}"`
-
+    const escapeCSV = val => `"${String(val).replace(/"/g, '""')}"`
     const csvContent =
-      '\uFEFF' + // UTF-8 BOM for Excel accents
+      '\uFEFF' +
       [headers.join(';'), ...rows.map(row => row.map(escapeCSV).join(';'))].join('\r\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -103,61 +92,36 @@ export default function AffectationHistorique() {
   }
 
   const handleExportPDF = () => {
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4',
-    })
-
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
     const pageWidth = doc.internal.pageSize.getWidth()
+
     doc.setFontSize(16)
     doc.text("ETAT D'HISTORIQUE D'AFFECTATION", pageWidth / 2, 15, { align: 'center' })
     doc.setFontSize(10)
-    doc.text(`Port : DEPL`, pageWidth / 2, 22, { align: 'center' })
+    doc.text('Port : DEPL', pageWidth / 2, 22, { align: 'center' })
     doc.text(`Date d'impression: ${todayStr}`, 14, 30)
 
-    const headers = [[
-      'Rank',
-      'Mat',
-      'Nom',
-      'Situation',
-      'Nbr. Enfant',
-      'An. Recrut.',
-      col1,
-      col2,
-      'Note',
-    ]]
+    const headers = [['Rank', 'Mat', 'Nom', 'Situation', 'Nbr. Enfant', 'An. Recrut.', col1, col2, 'Note']]
 
     const rows = records.map((r, idx) => [
       idx + 1,
-      r.matricule || r.mat || '',
-      r.nom_complet || r.nom || '',
-      r.situation_familiale || r.situation || '',
-      r.nombre_enfants_beneficiaires ?? r.nbrEnfant ?? '',
-      r.date_affectation_au_bureau
-        ? new Date(r.date_affectation_au_bureau).getFullYear()
-        : r.anRecrut || '',
-      r[col1] != null ? r[col1] : '',
-      r[col2] != null ? r[col2] : '',
-      r.note != null ? r.note : '',
+      r.matricule || '',
+      r.nom_complet || '',
+      r.situation_familiale || '',
+      r.nombre_enfants_beneficiaires ?? '',
+      r.date_affectation_au_bureau ? new Date(r.date_affectation_au_bureau).getFullYear() : '',
+      r[col1] === '✔️' ? 'oui' : '',
+      r[col2] === '✔️' ? 'oui' : '',
+      r.note ?? '-',
     ])
 
     autoTable(doc, {
       startY: 35,
       head: headers,
       body: rows,
-      styles: {
-        fontSize: 8,
-        cellPadding: 2,
-      },
-      headStyles: {
-        fillColor: [0, 122, 204],
-        textColor: 255,
-        halign: 'center',
-      },
-      bodyStyles: {
-        halign: 'center',
-      },
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [0, 122, 204], textColor: 255, halign: 'center' },
+      bodyStyles: { halign: 'center' },
       margin: { top: 35, bottom: 20 },
       theme: 'grid',
     })
@@ -301,70 +265,110 @@ export default function AffectationHistorique() {
         }
       `}</style>
 
-       <div className="page-wrapper">
-        <div className="button-row">
-          <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
-          <button className="btn btn-csv" onClick={handleExportCSV}>Exporter CSV</button>
-          <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
+     <div className="page-wrapper">
+  <div className="button-row">
+    <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
+    <button className="btn btn-csv" onClick={handleExportCSV}>Exporter CSV</button>
+    <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
+  </div>
+
+  <div className="container">
+    <hr />
+    <h1>ETAT D'HISTORIQUE D'AFFECTATION</h1>
+    <h2>Port : DEPL</h2>
+    <hr />
+
+    {loading ? (
+      <p style={{ textAlign: 'center', padding: 20 }}>Chargement...</p>
+    ) : error ? (
+      <p style={{ textAlign: 'center', color: 'red', padding: 20 }}>Erreur: {error}</p>
+    ) : records.length === 0 ? (
+      <p style={{ textAlign: 'center', padding: 20, fontStyle: 'italic', color: '#555' }}>
+        Aucun enregistrement trouvé — table vide.
+      </p>
+    ) : (
+      <>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Mat</th>
+              <th>Nom</th>
+              <th>Situation</th>
+              <th>Nbr. Enfant</th>
+              <th>An. Recrut.</th>
+              <th>{col1}</th>
+              <th>{col2}</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {currentRecords.map((rec, idx) => (
+              <tr key={rec.matricule || idx}>
+                <td>{indexOfFirstRecord + idx + 1}</td>
+                <td>{rec.matricule || ''}</td>
+                <td>{rec.nom_complet || ''}</td>
+                <td>{rec.situation_familiale || ''}</td>
+                <td>{rec.nombre_enfants_beneficiaires ?? ''}</td>
+                <td>
+                  {rec.date_affectation_au_bureau
+                    ? new Date(rec.date_affectation_au_bureau).getFullYear()
+                    : ''}
+                </td>
+                <td>{rec[col1] ?? ''}</td>
+                <td>{rec[col2] ?? ''}</td>
+                <td>{rec.note ?? ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Pagination with clickable numbers */}
+        <div style={{ marginTop: 20, textAlign: 'center' }}>
+          {[...Array(totalPages).keys()].map(n => {
+            const pageNum = n + 1
+            const isActive = currentPage === pageNum
+            return (
+              <button
+                key={pageNum}
+                onClick={() => setCurrentPage(pageNum)}
+                className="btn"
+                style={{
+                  margin: '0 5px',
+                  backgroundColor: isActive ? '#1976d2' : '#ccc',
+                  color: isActive ? 'white' : 'black',
+                  fontWeight: isActive ? '700' : '400',
+                  width: 36,
+                  height: 36,
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  boxShadow: isActive ? '0 0 8px #1976d2' : 'none',
+                  padding: 0,
+                  border: 'none',
+                  outline: 'none',
+                  userSelect: 'none',
+                }}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                {pageNum}
+              </button>
+            )
+          })}
         </div>
 
-        <div className="container">
-          <hr />
-          <h1>ETAT D'HISTORIQUE D'AFFECTATION</h1>
-          <h2>Port : DEPL</h2>
-          <hr />
-
-          {loading ? (
-            <p style={{ textAlign: 'center', padding: 20 }}>Chargement...</p>
-          ) : error ? (
-            <p style={{ textAlign: 'center', color: 'red', padding: 20 }}>Erreur: {error}</p>
-          ) : records.length === 0 ? (
-            <p style={{ textAlign: 'center', padding: 20, fontStyle: 'italic', color: '#555' }}>
-              Aucun enregistrement trouvé — table vide.
-            </p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Mat</th>
-                  <th>Nom</th>
-                  <th>Situation</th>
-                  <th>Nbr. Enfant</th>
-                  <th>An. Recrut.</th>
-                  <th>{col1}</th>
-                  <th>{col2}</th>
-                  <th>Note</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((rec, idx) => (
-                  <tr key={rec.id || idx}>
-                    <td>{idx + 1}</td>
-                    <td>{rec.matricule || rec.mat || ''}</td>
-                    <td>{rec.nom_complet || rec.nom || ''}</td>
-                    <td>{rec.situation_familiale || rec.situation || ''}</td>
-                    <td>{rec.nombre_enfants_beneficiaires ?? rec.nbrEnfant ?? ''}</td>
-                    <td>
-                      {rec.date_affectation_au_bureau
-                        ? new Date(rec.date_affectation_au_bureau).getFullYear()
-                        : rec.anRecrut || ''}
-                    </td>
-                    <td>{rec[col1] != null ? rec[col1] : ''}</td>
-                    <td>{rec[col2] != null ? rec[col2] : ''}</td>
-                    <td>{rec.note != null ? rec.note : ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          <div className="footer-bar">
-            <span>Date d'aujourd'hui : {todayStr}</span>
-            <span>Page 1</span>
-          </div>
+        <div style={{ marginTop: 10, textAlign: 'center', fontWeight: 600 }}>
+          Page {currentPage} / {totalPages}
         </div>
-      </div>
+
+        <div className="footer-bar">
+          <span>Date d'impression : {today.toLocaleDateString('fr-FR')}</span>
+          <span>Page {currentPage}</span>
+        </div>
+      </>
+    )}
+  </div>
+</div>
+
     </>
   )
 }

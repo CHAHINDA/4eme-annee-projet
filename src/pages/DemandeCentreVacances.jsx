@@ -40,7 +40,7 @@ export default function DemandeCentreVacances() {
     if (!matricule || matricule.trim() === '') {
       console.warn('Matricule utilisateur manquant ou vide.')
       alert("Matricule utilisateur manquant. Veuillez vous reconnecter.")
-      navigate('/login') // or your app’s safe fallback page
+      navigate('/') // or your app’s safe fallback page
       return
     }
 
@@ -109,9 +109,37 @@ export default function DemandeCentreVacances() {
     clone.style.minHeight = '297mm'
     clone.style.padding = '0.5cm 0cm 5cm 0cm'
 
-    document.body.appendChild(clone)
-    return clone
-  }
+    // For Premier choix
+  const premierChoixSelect = clone.querySelector('select[name="premierChoix"]');
+  if (premierChoixSelect) premierChoixSelect.value = formData.premierChoix;
+
+  // For Deuxieme choix
+  const deuxiemeChoixSelect = clone.querySelector('select[name="deuxiemeChoix"]');
+  if (deuxiemeChoixSelect) deuxiemeChoixSelect.value = formData.deuxiemeChoix;
+
+  // For Troisieme choix
+  const troisiemeChoixSelect = clone.querySelector('select[name="troisiemeChoix"]');
+  if (troisiemeChoixSelect) troisiemeChoixSelect.value = formData.troisiemeChoix;
+
+  // For date inputs, set value attributes as well
+  const dateFields = [
+    'periodePremierDebut',
+    'periodePremierFin',
+    'periodeDeuxiemeDebut',
+    'periodeDeuxiemeFin',
+    'periodeTroisiemeDebut',
+    'periodeTroisiemeFin'
+  ];
+
+  dateFields.forEach(name => {
+    const input = clone.querySelector(`input[name="${name}"]`);
+    if (input) input.value = formData[name];
+  });
+
+  document.body.appendChild(clone);
+  return clone;
+};
+
 
   const handleImprimer = async () => {
     setIsPrinting(true);
@@ -712,7 +740,7 @@ export default function DemandeCentreVacances() {
           </div>
 
             {/* Box 2 with modified table */}
-        <table>
+  <table>
   <thead>
     <tr>
       <th>Choix du centre de vacances</th>
@@ -749,36 +777,62 @@ export default function DemandeCentreVacances() {
     <tr>
       <td>Centre demandé</td>
       <td>
-        <input
-          className="table-input"
-          type="text"
+        <select
           required
-          placeholder="Obligatoire"
           name="premierChoix"
           value={formData.premierChoix}
           onChange={handleChange}
-        />
+          className="table-input"
+        >
+          <option value="">-- Sélectionner --</option>
+          <option value="CVL">CVL</option>
+          <option value="CVAG">CVAG</option>
+          <option value="CVM">CVM</option>
+          <option value="CVE">CVE</option>
+          <option value="CVIF">CVIF</option>
+          <option value="CVI">CVI</option>
+          <option value="CVC">CVC</option>
+          <option value="CVS">CVS</option>
+        </select>
       </td>
       {showSecondChoice && (
         <td>
-          <input
-            className="table-input"
-            type="text"
+          <select
             name="deuxiemeChoix"
             value={formData.deuxiemeChoix}
             onChange={handleChange}
-          />
+            className="table-input"
+          >
+            <option value="">-- Sélectionner --</option>
+            <option value="CVL">CVL</option>
+            <option value="CVAG">CVAG</option>
+            <option value="CVM">CVM</option>
+            <option value="CVE">CVE</option>
+            <option value="CVIF">CVIF</option>
+            <option value="CVI">CVI</option>
+            <option value="CVC">CVC</option>
+            <option value="CVS">CVS</option>
+          </select>
         </td>
       )}
       {showThirdChoice && (
         <td>
-          <input
-            className="table-input"
-            type="text"
+          <select
             name="troisiemeChoix"
             value={formData.troisiemeChoix}
             onChange={handleChange}
-          />
+            className="table-input"
+          >
+            <option value="">-- Sélectionner --</option>
+            <option value="CVL">CVL</option>
+            <option value="CVAG">CVAG</option>
+            <option value="CVM">CVM</option>
+            <option value="CVE">CVE</option>
+            <option value="CVIF">CVIF</option>
+            <option value="CVI">CVI</option>
+            <option value="CVC">CVC</option>
+            <option value="CVS">CVS</option>
+          </select>
         </td>
       )}
     </tr>
@@ -842,6 +896,7 @@ export default function DemandeCentreVacances() {
     </tr>
   </tbody>
 </table>
+
 
           <div className="form-box only-pdf">
   <div className="form-title">Engagement du bénéficiaire</div>

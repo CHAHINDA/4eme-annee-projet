@@ -6,18 +6,24 @@ import autoTable from 'jspdf-autotable'
 export default function DemandeSejour() {
   const navigate = useNavigate()
   const [demandes, setDemandes] = useState([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const rowsPerPage = 5
   const today = new Date().toLocaleDateString('fr-FR')
 
-useEffect(() => {
-  fetch('http://localhost:5000/api/demandes') // Change to your actual API URL
-    .then(res => {
-      if (!res.ok) throw new Error('Failed to fetch');
-      return res.json();
-    })
-    .then(data => setDemandes(data))
-    .catch(err => console.error('Erreur fetch demandes:', err));
-}, []);
+  useEffect(() => {
+    fetch('http://localhost:5000/api/demandes')
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch')
+        return res.json()
+      })
+      .then(data => setDemandes(data))
+      .catch(err => console.error('Erreur fetch demandes:', err))
+  }, [])
 
+  const totalPages = Math.ceil(demandes.length / rowsPerPage)
+  const indexOfLastRow = currentPage * rowsPerPage
+  const indexOfFirstRow = indexOfLastRow - rowsPerPage
+  const currentRows = demandes.slice(indexOfFirstRow, indexOfLastRow)
 
   const handleRetour = () => {
     navigate('/admin')
@@ -39,14 +45,12 @@ useEffect(() => {
       'Période 3',
       'Type de demande',
       'Statut',
-      'Créé le',
-      'Modifié le',
     ]
 
     const rows = demandes.map(d => [
       d.matricule,
       d.nom_complet,
-      d.date_affectation_au_bureau || '',
+      formatDate(d.date_affectation_au_bureau),
       d.nes || '',
       d.situation_familiale || '',
       d.premier_choix || '',
@@ -57,8 +61,6 @@ useEffect(() => {
       d.periode3 || '',
       d.demande_type || '',
       d.statut || '',
-      d.cree_le || '',
-      d.modifie_le || '',
     ])
 
     const csvContent = '\uFEFF' + [
@@ -108,14 +110,13 @@ useEffect(() => {
       'Période 3',
       'Type de demande',
       'Statut',
-      'Créé le',
-      'Modifié le',
+
     ]]
 
     const rows = demandes.map(d => [
       d.matricule,
       d.nom_complet,
-      d.date_affectation_au_bureau || '',
+      formatDate(d.date_affectation_au_bureau),
       (d.nes || '').toString(),
       d.situation_familiale || '',
       d.premier_choix || '',
@@ -126,8 +127,7 @@ useEffect(() => {
       d.periode3 || '',
       d.demande_type || '',
       d.statut || '',
-      d.cree_le || '',
-      d.modifie_le || '',
+
     ])
 
     autoTable(doc, {
@@ -211,6 +211,42 @@ const handleProcessForms = async () => {
     alert(`Erreur: ${err.message}`);
   }
 };
+// Add this inside your component
+
+const handleResetToEnAttente = async () => {
+  if (!window.confirm("Voulez-vous vraiment remettre toutes les demandes en 'En attente' ?")) return;
+
+  try {
+    const res = await fetch('http://localhost:5000/api/forms/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erreur lors du reset');
+    }
+
+    alert('Toutes les demandes ont été remises en "En attente".');
+
+    // Refresh demandes list
+    const demandesRes = await fetch('http://localhost:5000/api/demandes');
+    if (!demandesRes.ok) throw new Error('Erreur lors de la récupération des demandes');
+    const demandesData = await demandesRes.json();
+    setDemandes(demandesData);
+
+  } catch (error) {
+    console.error(error);
+    alert(`Erreur: ${error.message}`);
+  }
+};
+const formatDate = (isoDateStr) => {
+  if (!isoDateStr) return '';
+  const date = new Date(isoDateStr);
+  if (isNaN(date)) return ''; // invalid date guard
+  return date.toLocaleDateString('fr-FR'); // format as DD/MM/YYYY
+};
+
 
 
   return (
@@ -394,12 +430,14 @@ const handleProcessForms = async () => {
       `}</style>
 
       <div className="page-wrapper">
-       <div className="button-row">
+  <div className="button-row">
   <button className="btn btn-process" onClick={handleProcessForms}>Lancer traitement</button>
+  <button className="btn btn-process" onClick={handleResetToEnAttente} style={{backgroundColor:'#f57c00'}}>Relancer traitement</button>
   <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
   <button className="btn btn-csv" onClick={handleExportCSV}>Exporter EXCEL</button>
   <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
 </div>
+
 
 
         <div className="container">
@@ -427,42 +465,76 @@ const handleProcessForms = async () => {
       <th>Période 3</th>
       <th>Type de demande</th>
       <th>Statut</th>
-      <th>Créé le</th>
-      <th>Modifié le</th>
       <th>Action</th>
     </tr>
   </thead>
   <tbody>
-    {demandes.map((d, i) => (
-      <tr key={i}>
-        <td>{d.matricule}</td>
-        <td>{d.nom_complet}</td>
-        <td>{d.date_affectation_au_bureau || ''}</td>
-        <td>{d.nes || ''}</td>
-        <td>{d.situation_familiale || ''}</td>
-        <td>{d.premier_choix || ''}</td>
-        <td>{d.periode1 || ''}</td>
-        <td>{d.deuxieme_choix || ''}</td>
-        <td>{d.periode2 || ''}</td>
-        <td>{d.troisieme_choix || ''}</td>
-        <td>{d.periode3 || ''}</td>
-        <td>{d.demande_type || ''}</td>
-        <td>{d.statut || ''}</td>
-        <td>{d.cree_le || ''}</td>
-        <td>{d.modifie_le || ''}</td>
-        <td>
-  <button className="btn-delete" onClick={() => handleDelete(d.id)}>Supprimer</button>
-</td>
+              {currentRows.length === 0 ? (
+                <tr>
+                  <td colSpan="14" style={{ textAlign: 'center', padding: '20px' }}>
+                    Table vide
+                  </td>
+                </tr>
+              ) : (
+                currentRows.map((d) => (
+                  <tr key={d.id}>
+                    <td>{d.matricule}</td>
+                    <td>{d.nom_complet}</td>
+                    <td>{formatDate(d.date_affectation_au_bureau)}</td>
+                    <td>{d.nes || ''}</td>
+                    <td>{d.situation_familiale || ''}</td>
+                    <td>{d.premier_choix || ''}</td>
+                    <td>{d.periode1 || ''}</td>
+                    <td>{d.deuxieme_choix || ''}</td>
+                    <td>{d.periode2 || ''}</td>
+                    <td>{d.troisieme_choix || ''}</td>
+                    <td>{d.periode3 || ''}</td>
+                    <td>{d.demande_type || ''}</td>
+                    <td>{d.statut || ''}</td>
+                    <td>
+                      <button className="btn-delete" onClick={() => handleDelete(d.id)}>Supprimer</button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
 
-      </tr>
-    ))}
-  </tbody>
-</table>
+          {/* Pagination with clickable numbers */}
+          <div style={{ marginTop: '20px', textAlign: 'center' }}>
+            {[...Array(totalPages).keys()].map(n => {
+              const pageNum = n + 1
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className="btn"
+                  style={{
+                    margin: '0 5px',
+                    backgroundColor: currentPage === pageNum ? '#1976d2' : '#ccc',
+                    color: currentPage === pageNum ? 'white' : 'black',
+                    fontWeight: currentPage === pageNum ? '700' : '400',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    boxShadow: currentPage === pageNum ? '0 0 8px #1976d2' : 'none',
+                    padding: 0,
+                  }}
+                >
+                  {pageNum}
+                </button>
+              )
+            })}
+          </div>
 
+          <div style={{ marginTop: '10px', textAlign: 'center', fontWeight: '600' }}>
+            Page {currentPage} / {totalPages}
+          </div>
 
           <div className="footer-bar">
             <span>Date d'impression : {today}</span>
-            <span>Page 1</span>
+            <span>Page {currentPage}</span>
           </div>
         </div>
       </div>
