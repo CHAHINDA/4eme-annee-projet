@@ -239,55 +239,31 @@ app.post("/api/login", async (req, res) => {
 app.post("/api/forms", async (req, res) => {
   const {
     matricule,
-    premier_choix,
-    deuxieme_choix,
-    troisieme_choix,
-    periode_premier_debut,
-    periode_premier_fin,
-    periode_deuxieme_debut,
-    periode_deuxieme_fin,
-    periode_troisieme_debut,
-    periode_troisieme_fin,
+    choix_num,
+    centre_choisi,
+    periode_debut,
+    periode_fin,
     demande_type,
-    statut,
+    statut
   } = req.body;
 
   try {
     const result = await pool.query(
       `INSERT INTO forms (
-        matricule,
-        premier_choix,
-        deuxieme_choix,
-        troisieme_choix,
-        periode_premier_debut,
-        periode_premier_fin,
-        periode_deuxieme_debut,
-        periode_deuxieme_fin,
-        periode_troisieme_debut,
-        periode_troisieme_fin,
-        demande_type,
-        statut,
-        cree_le,
-        modifie_le
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()
-      ) RETURNING *`,
+        matricule, choix_num, centre_choisi, periode_debut, periode_fin, 
+        demande_type, statut, cree_le, modifie_le
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      RETURNING *`,
       [
         matricule || null,
-        premier_choix || null,
-        deuxieme_choix || null,
-        troisieme_choix || null,
-        periode_premier_debut || null,
-        periode_premier_fin || null,
-        periode_deuxieme_debut || null,
-        periode_deuxieme_fin || null,
-        periode_troisieme_debut || null,
-        periode_troisieme_fin || null,
+        choix_num || null,
+        centre_choisi || null,
+        periode_debut || null,
+        periode_fin || null,
         demande_type || null,
-        statut || null,
+        statut || 'En attente'
       ]
     );
-
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error("Erreur lors de l'insertion du formulaire :", err);
@@ -295,54 +271,53 @@ app.post("/api/forms", async (req, res) => {
   }
 });
 
+
 app.get('/api/demandes', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT
+      SELECT 
         f.id,
         f.matricule,
         u.nom_complet,
         u.date_affectation_au_bureau,
         u.nombre_enfants_beneficiaires AS nes,
         u.situation_familiale,
-        f.premier_choix,
-        f.deuxieme_choix,
-        f.troisieme_choix,
-        CONCAT(
-          TO_CHAR(f.periode_premier_debut, 'DD/MM/YYYY'), ' au ', TO_CHAR(f.periode_premier_fin, 'DD/MM/YYYY')
-        ) AS periode1,
-        CONCAT(
-          TO_CHAR(f.periode_deuxieme_debut, 'DD/MM/YYYY'), ' au ', TO_CHAR(f.periode_deuxieme_fin, 'DD/MM/YYYY')
-        ) AS periode2,
-        CONCAT(
-          TO_CHAR(f.periode_troisieme_debut, 'DD/MM/YYYY'), ' au ', TO_CHAR(f.periode_troisieme_fin, 'DD/MM/YYYY')
-        ) AS periode3,
+        f.choix_num,
+        f.centre_choisi,
+        TO_CHAR(f.periode_debut, 'DD/MM/YYYY') AS periode_debut,
+        TO_CHAR(f.periode_fin, 'DD/MM/YYYY') AS periode_fin,
         f.demande_type,
         f.statut,
-        TO_CHAR(f.cree_le, 'DD/MM/YYYY') AS cree_le,
+        f.note,
+        f.cree_le,
+        TO_CHAR(f.cree_le, 'DD/MM/YYYY') AS cree_le_formatted,
         TO_CHAR(f.modifie_le, 'DD/MM/YYYY') AS modifie_le
       FROM forms f
-      JOIN users u ON f.matricule = u.matricule
-      ORDER BY u.nom_complet
+      LEFT JOIN users u ON f.matricule = u.matricule
+      ORDER BY f.cree_le DESC, f.choix_num;
     `);
 
-    res.json(result.rows); // ✅ Send JSON to frontend
+    res.json(result.rows);
   } catch (err) {
     console.error("Erreur lors de la récupération des demandes:", err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
+
 // DELETE /api/demandes/:id
 app.delete('/api/demandes/:id', async (req, res) => {
+  const { id } = req.params;
   try {
-    const { id } = req.params;
-    await pool.query('DELETE FROM forms WHERE id = $1', [id]); // or whatever your table is
-    res.status(204).send();
+    const result = await pool.query("DELETE FROM forms WHERE id = $1", [id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: "Demande non trouvée" });
+    res.status(200).json({ message: "Demande supprimée" });
   } catch (err) {
     console.error('Erreur suppression:', err);
-    res.status(500).json({ error: 'Erreur lors de la suppression.' });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
 
 
 app.get("/api/admin", async (req, res) => {
@@ -444,9 +419,10 @@ app.post('/api/forms/prepare', async (req, res) => {
     res.json({ message: "Demandes passées en traitement." });
   } catch (err) {
     console.error("Erreur dans /prepare:", err);
-    res.status(500).json({ error: "Erreur lors du passage en traitement." });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
 app.post('/api/forms/reset', async (req, res) => {
   try {
     const currentYear = new Date().getFullYear().toString();
@@ -498,7 +474,6 @@ app.post('/api/forms/process', async (req, res) => {
 
     const currentYear = new Date().getFullYear().toString();
 
-    // Store results for later ranking
     let processedForms = [];
 
     // 2️⃣ Calculate note for everyone
@@ -550,11 +525,11 @@ app.post('/api/forms/process', async (req, res) => {
       });
     }
 
-    // 3️⃣ Group forms by (premier_choix, periode_premier_debut)
+    // 3️⃣ Group forms by (centre_choisi, periode_debut)
     const groups = {};
     for (const pf of processedForms) {
-      const centre = pf.form.premier_choix || "unknown_centre";
-      const startDate = pf.form.periode_premier_debut; // Date string
+      const centre = pf.form.centre_choisi || "unknown_centre";
+      const startDate = pf.form.periode_debut;
       const key = `${centre}_${startDate}`;
       if (!groups[key]) groups[key] = [];
       groups[key].push(pf);
@@ -564,7 +539,6 @@ app.post('/api/forms/process', async (req, res) => {
     for (const key in groups) {
       const group = groups[key];
 
-      // Sort by highest note desc, then earliest date_affectation_au_bureau asc
       group.sort((a, b) => {
         if (b.note !== a.note) return b.note - a.note;
         return new Date(a.user.date_affectation_au_bureau) - new Date(b.user.date_affectation_au_bureau);
@@ -573,10 +547,10 @@ app.post('/api/forms/process', async (req, res) => {
       for (let i = 0; i < group.length; i++) {
         const { form, user, note } = group[i];
 
-        // Extract month (0 = Jan, 5 = June, etc.) from periode_premier_debut
-        const monthNum = new Date(form.periode_premier_debut).getMonth();
+        // Month of periode_debut
+        const monthNum = new Date(form.periode_debut).getMonth();
 
-        // Célibataire summer exclusion June (5), July (6), August (7)
+        // Célibataire summer exclusion
         const isSummerCeli =
           user.situation_familiale.toLowerCase() === "célibataire" &&
           [5, 6, 7].includes(monthNum);
@@ -586,13 +560,11 @@ app.post('/api/forms/process', async (req, res) => {
           newStatut = "valide";
         }
 
-        // Update statut in forms
-        // Update statut and note in forms
-await pool.query(
-  "UPDATE forms SET statut = $1, note = $2 WHERE id = $3",
-  [newStatut, note, form.id]
-);
-
+        // Update forms
+        await pool.query(
+          "UPDATE forms SET statut = $1, note = $2 WHERE id = $3",
+          [newStatut, note, form.id]
+        );
 
         // Update benefit_history only if valide
         if (newStatut === "valide") {
@@ -622,6 +594,7 @@ await pool.query(
     res.status(500).json({ error: "Erreur lors du traitement final." });
   }
 });
+
 
 
 
@@ -684,6 +657,38 @@ app.get('/api/forms/historique', async (req, res) => {
   } catch (error) {
     console.error('Erreur dans /api/forms/historique:', error);
     res.status(500).json({ error: 'Erreur serveur lors de récupération historique' });
+  }
+});
+
+
+app.get('/api/beneficiaires', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        f.matricule,
+        u.nom_complet,
+        f.centre_choisi,
+        f.periode_debut,
+        f.periode_fin
+      FROM forms f
+      JOIN users u ON f.matricule = u.matricule
+      JOIN benefit_history bh ON bh.matricule = f.matricule AND bh.benefit_year = EXTRACT(YEAR FROM NOW())::int
+      WHERE f.statut = 'valide'
+      ORDER BY u.nom_complet
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Erreur dans /api/beneficiaires :", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+app.get('/api/test-db', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT current_database() AS db, current_user AS user');
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

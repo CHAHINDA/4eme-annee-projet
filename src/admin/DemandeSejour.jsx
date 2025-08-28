@@ -10,64 +10,151 @@ export default function DemandeSejour() {
   const rowsPerPage = 5
   const today = new Date().toLocaleDateString('fr-FR')
 
-  useEffect(() => {
-    fetch('http://localhost:5000/api/demandes')
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch')
-        return res.json()
-      })
-      .then(data => setDemandes(data))
-      .catch(err => console.error('Erreur fetch demandes:', err))
-  }, [])
-
-  const totalPages = Math.ceil(demandes.length / rowsPerPage)
-  const indexOfLastRow = currentPage * rowsPerPage
-  const indexOfFirstRow = indexOfLastRow - rowsPerPage
-  const currentRows = demandes.slice(indexOfFirstRow, indexOfLastRow)
-
-  const handleRetour = () => {
-    navigate('/admin')
+  // --- Declare formatDate first ---
+  const formatDate = (isoDateStr) => {
+    if (!isoDateStr) return ''
+    const date = new Date(isoDateStr)
+    if (isNaN(date)) return ''
+    return date.toLocaleDateString('fr-FR')
   }
 
-  // CSV Export
+  // -------- Group demandes by user to combine choices 1/2/3 --------
+    const groupedDemandes = () => {
+    const grouped = {}
+    demandes.forEach(d => {
+      const key = `${d.matricule}-${d.demande_type}`
+      if (!grouped[key]) {
+        grouped[key] = {
+          matricule: d.matricule,
+          nom_complet: d.nom_complet || '',
+          date_affectation_au_bureau: d.date_affectation_au_bureau || '',
+          nes: d.nes || '',
+          situation_familiale: d.situation_familiale || '',
+          demande_type: d.demande_type,
+          statut: d.statut,
+          id: d.id,
+          premier_choix: '',
+          periode1: '',
+          deuxieme_choix: '',
+          periode2: '',
+          troisieme_choix: '',
+          periode3: ''
+        }
+      }
+
+      // Avoid overwriting same choice multiple times
+      if (d.choix_num === 1 && !grouped[key].premier_choix) {
+        grouped[key].premier_choix = d.centre_choisi
+        grouped[key].periode1 = `${d.periode_debut} au ${d.periode_fin}`
+      } else if (d.choix_num === 2 && !grouped[key].deuxieme_choix) {
+        grouped[key].deuxieme_choix = d.centre_choisi
+        grouped[key].periode2 = `${d.periode_debut} au ${d.periode_fin}`
+      } else if (d.choix_num === 3 && !grouped[key].troisieme_choix) {
+        grouped[key].troisieme_choix = d.centre_choisi
+        grouped[key].periode3 = `${d.periode_debut} au ${d.periode_fin}`
+      }
+
+      // Always keep latest statut/id
+      if (!grouped[key].cree_le || new Date(d.cree_le) > new Date(grouped[key].cree_le)) {
+        grouped[key].id = d.id
+        grouped[key].statut = d.statut
+        grouped[key].cree_le = d.cree_le
+      }
+    })
+    return Object.values(grouped)
+  }
+
+  const allGroupedRows = groupedDemandes()
+    .sort((a, b) => new Date(b.cree_le) - new Date(a.cree_le))
+
+  const totalPages = Math.ceil(allGroupedRows.length / rowsPerPage)
+  const indexOfLastRow = currentPage * rowsPerPage
+  const indexOfFirstRow = indexOfLastRow - rowsPerPage
+  const currentRows = allGroupedRows.slice(indexOfFirstRow, indexOfLastRow)
+
+
+  useEffect(() => {
+  const fetchDemandes = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/demandes')
+      if (!res.ok) throw new Error('Failed to fetch')
+      const data = await res.json()
+      setDemandes(data)
+    } catch (err) {
+      console.error('Erreur fetch demandes:', err)
+    }
+  }
+  fetchDemandes()
+}, [])
+
+
+  // ------------------- Handlers -------------------
+  const handleRetour = () => navigate('/admin')
+
+ 
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Voulez-vous vraiment supprimer cette demande ?')) return
+    try {
+      const res = await fetch(`http://localhost:5000/api/demandes/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Erreur lors de la suppression')
+      setDemandes(demandes.filter(d => d.id !== id))
+    } catch (err) {
+      console.error('Erreur suppression:', err)
+      alert('Échec de la suppression. Veuillez réessayer.')
+    }
+  }
+
+  const handleProcessForms = async () => {
+    if (!window.confirm("Voulez-vous vraiment lancer le traitement des demandes ?")) return;
+    try {
+      await fetch('http://localhost:5000/api/forms/prepare', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      const res = await fetch('http://localhost:5000/api/forms/process', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Erreur lors du traitement')
+      }
+      const data = await res.json()
+      alert(data.message || 'Traitement terminé')
+      const demandesRes = await fetch('http://localhost:5000/api/demandes')
+      setDemandes(await demandesRes.json())
+    } catch (err) {
+      console.error(err)
+      alert(`Erreur: ${err.message}`)
+    }
+  }
+
+  const handleResetToEnAttente = async () => {
+    if (!window.confirm("Voulez-vous vraiment remettre toutes les demandes en 'En attente' ?")) return
+    try {
+      const res = await fetch('http://localhost:5000/api/forms/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Erreur lors du reset')
+      }
+      alert('Toutes les demandes ont été remises en "En attente".')
+      const demandesRes = await fetch('http://localhost:5000/api/demandes')
+      setDemandes(await demandesRes.json())
+    } catch (error) {
+      console.error(error)
+      alert(`Erreur: ${error.message}`)
+    }
+  }
+
+  // ---------------- Export CSV ----------------
   const handleExportCSV = () => {
     const headers = [
-      'Matricule',
-      'Nom & Prénom',
-      "Date d'embauche",
-      'NES',
-      'Situation F',
-      'Choix 1',
-      'Période 1',
-      'Choix 2',
-      'Période 2',
-      'Choix 3',
-      'Période 3',
-      'Type de demande',
-      'Statut',
+      'Matricule', 'Nom & Prénom', "Date d'embauche", 'NES', 'Situation F',
+      'Choix 1', 'Période 1', 'Choix 2', 'Période 2', 'Choix 3', 'Période 3',
+      'Type de demande', 'Statut'
     ]
-
-    const rows = demandes.map(d => [
-      d.matricule,
-      d.nom_complet,
-      formatDate(d.date_affectation_au_bureau),
-      d.nes || '',
-      d.situation_familiale || '',
-      d.premier_choix || '',
-      d.periode1 || '',
-      d.deuxieme_choix || '',
-      d.periode2 || '',
-      d.troisieme_choix || '',
-      d.periode3 || '',
-      d.demande_type || '',
-      d.statut || '',
+    const rows = allGroupedRows.map(d => [
+      d.matricule, d.nom_complet, formatDate(d.date_affectation_au_bureau), d.nes || '', d.situation_familiale || '',
+      d.premier_choix, d.periode1, d.deuxieme_choix, d.periode2, d.troisieme_choix, d.periode3,
+      d.demande_type, d.statut
     ])
-
-    const csvContent = '\uFEFF' + [
-      headers.join(','),
-      ...rows.map(row => row.map(field => `"${field}"`).join(',')),
-    ].join('\r\n')
-
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(row => row.map(f => `"${f}"`).join(','))].join('\r\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -78,17 +165,11 @@ export default function DemandeSejour() {
     document.body.removeChild(link)
   }
 
-  // PDF Export
+  // ---------------- Export PDF ----------------
   const handleExportPDF = () => {
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4',
-    })
-
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
     const title = 'Demandes de séjour reçues - Session Estivale 2025'
     const pageWidth = doc.internal.pageSize.getWidth()
-
     doc.setFontSize(16)
     doc.text('Marsa Maroc / DEPL', pageWidth / 2, 15, { align: 'center' })
     doc.setFontSize(12)
@@ -97,55 +178,23 @@ export default function DemandeSejour() {
     doc.text(`Date d'impression: ${today}`, 14, 35)
 
     const headers = [[
-      'Matricule',
-      'Nom & Prénom',
-      "Date d'embauche",
-      'NES',
-      'Situation F',
-      'Choix 1',
-      'Période 1',
-      'Choix 2',
-      'Période 2',
-      'Choix 3',
-      'Période 3',
-      'Type de demande',
-      'Statut',
-
+      'Matricule', 'Nom & Prénom', "Date d'embauche", 'NES', 'Situation F',
+      'Choix 1', 'Période 1', 'Choix 2', 'Période 2', 'Choix 3', 'Période 3',
+      'Type de demande', 'Statut'
     ]]
-
-    const rows = demandes.map(d => [
-      d.matricule,
-      d.nom_complet,
-      formatDate(d.date_affectation_au_bureau),
-      (d.nes || '').toString(),
-      d.situation_familiale || '',
-      d.premier_choix || '',
-      d.periode1 || '',
-      d.deuxieme_choix || '',
-      d.periode2 || '',
-      d.troisieme_choix || '',
-      d.periode3 || '',
-      d.demande_type || '',
-      d.statut || '',
-
+    const rows = allGroupedRows.map(d => [
+      d.matricule, d.nom_complet, formatDate(d.date_affectation_au_bureau), d.nes || '', d.situation_familiale || '',
+      d.premier_choix, d.periode1, d.deuxieme_choix, d.periode2, d.troisieme_choix, d.periode3,
+      d.demande_type, d.statut
     ])
 
     autoTable(doc, {
       startY: 40,
       head: headers,
       body: rows,
-      styles: {
-        fontSize: 8,
-        cellPadding: 2,
-      },
-      headStyles: {
-        fillColor: [0, 122, 204],
-        textColor: 255,
-        halign: 'center',
-      },
-      bodyStyles: {
-        halign: 'center',
-      },
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [0, 122, 204], textColor: 255, halign: 'center' },
+      bodyStyles: { halign: 'center' },
       margin: { top: 40, bottom: 20 },
       theme: 'grid',
     })
@@ -153,102 +202,7 @@ export default function DemandeSejour() {
     doc.save('demandes_sejour.pdf')
   }
 
-  const handleDelete = async (id) => {
-  if (!window.confirm('Voulez-vous vraiment supprimer cette demande ?')) return
-
-  try {
-    const res = await fetch(`http://localhost:5000/api/demandes/${id}`, {
-      method: 'DELETE',
-    })
-
-    if (!res.ok) {
-      throw new Error('Erreur lors de la suppression')
-    }
-
-    // Update frontend state
-    setDemandes(demandes.filter(d => d.id !== id))
-  } catch (err) {
-    console.error('Erreur suppression:', err)
-    alert('Échec de la suppression. Veuillez réessayer.')
-  }
-}
-const handleProcessForms = async () => {
-  if (!window.confirm("Voulez-vous vraiment lancer le traitement des demandes ?")) return;
-
-  try {
-    // Phase 1: Préparer (changer à 'en traitement')
-    const prepareRes = await fetch('http://localhost:5000/api/forms/prepare', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (!prepareRes.ok) throw new Error('Erreur lors de la préparation des formulaires');
-
-    // Optionally wait a few seconds (if needed)
-    await new Promise(resolve => setTimeout(resolve, 5000)); // 5 sec wait
-
-    // Phase 2: Traiter (calcul & note)
-    const res = await fetch('http://localhost:5000/api/forms/process', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Erreur lors du traitement');
-    }
-
-    const data = await res.json();
-    alert(data.message || 'Traitement terminé');
-
-    // Refresh demandes list
-    const demandesRes = await fetch('http://localhost:5000/api/demandes');
-    if (!demandesRes.ok) throw new Error('Erreur lors de la récupération des demandes');
-    const demandesData = await demandesRes.json();
-    setDemandes(demandesData);
-  } catch (err) {
-    console.error(err);
-    alert(`Erreur: ${err.message}`);
-  }
-};
-// Add this inside your component
-
-const handleResetToEnAttente = async () => {
-  if (!window.confirm("Voulez-vous vraiment remettre toutes les demandes en 'En attente' ?")) return;
-
-  try {
-    const res = await fetch('http://localhost:5000/api/forms/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Erreur lors du reset');
-    }
-
-    alert('Toutes les demandes ont été remises en "En attente".');
-
-    // Refresh demandes list
-    const demandesRes = await fetch('http://localhost:5000/api/demandes');
-    if (!demandesRes.ok) throw new Error('Erreur lors de la récupération des demandes');
-    const demandesData = await demandesRes.json();
-    setDemandes(demandesData);
-
-  } catch (error) {
-    console.error(error);
-    alert(`Erreur: ${error.message}`);
-  }
-};
-const formatDate = (isoDateStr) => {
-  if (!isoDateStr) return '';
-  const date = new Date(isoDateStr);
-  if (isNaN(date)) return ''; // invalid date guard
-  return date.toLocaleDateString('fr-FR'); // format as DD/MM/YYYY
-};
-
-
-
+  // ------------------- Render -------------------
   return (
     <>
       <style>{`
@@ -429,16 +383,14 @@ const formatDate = (isoDateStr) => {
 
       `}</style>
 
-      <div className="page-wrapper">
-  <div className="button-row">
-  <button className="btn btn-process" onClick={handleProcessForms}>Lancer traitement</button>
-  <button className="btn btn-process" onClick={handleResetToEnAttente} style={{backgroundColor:'#f57c00'}}>Relancer traitement</button>
-  <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
-  <button className="btn btn-csv" onClick={handleExportCSV}>Exporter EXCEL</button>
-  <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
-</div>
-
-
+       <div className="page-wrapper">
+        <div className="button-row">
+          <button className="btn btn-process" onClick={handleProcessForms}>Lancer traitement</button>
+          <button className="btn btn-process" onClick={handleResetToEnAttente} style={{backgroundColor:'#f57c00'}}>Relancer traitement</button>
+          <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
+          <button className="btn btn-csv" onClick={handleExportCSV}>Exporter EXCEL</button>
+          <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
+        </div>
 
         <div className="container">
           <h1>Marsa Maroc / DEPL</h1>
@@ -447,7 +399,7 @@ const formatDate = (isoDateStr) => {
 
           <div className="info-bar">
             <span>Catégorie : Agent</span>
-            <span>Nombre de demandes : {demandes.length}</span>
+            <span>Nombre de demandes : {allGroupedRows.length}</span>
           </div>
 <table>
   <thead>
@@ -469,38 +421,37 @@ const formatDate = (isoDateStr) => {
     </tr>
   </thead>
   <tbody>
-              {currentRows.length === 0 ? (
-                <tr>
-                  <td colSpan="14" style={{ textAlign: 'center', padding: '20px' }}>
-                    Table vide
-                  </td>
-                </tr>
-              ) : (
-                currentRows.map((d) => (
-                  <tr key={d.id}>
-                    <td>{d.matricule}</td>
-                    <td>{d.nom_complet}</td>
-                    <td>{formatDate(d.date_affectation_au_bureau)}</td>
-                    <td>{d.nes || ''}</td>
-                    <td>{d.situation_familiale || ''}</td>
-                    <td>{d.premier_choix || ''}</td>
-                    <td>{d.periode1 || ''}</td>
-                    <td>{d.deuxieme_choix || ''}</td>
-                    <td>{d.periode2 || ''}</td>
-                    <td>{d.troisieme_choix || ''}</td>
-                    <td>{d.periode3 || ''}</td>
-                    <td>{d.demande_type || ''}</td>
-                    <td>{d.statut || ''}</td>
-                    <td>
-                      <button className="btn-delete" onClick={() => handleDelete(d.id)}>Supprimer</button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+    {currentRows.length === 0 ? (
+      <tr>
+        <td colSpan="14" style={{ textAlign: 'center', padding: '20px' }}>Table vide</td>
+      </tr>
+    ) : (
+      currentRows.map((d) => (
+        <tr key={`${d.matricule}-${d.demande_type}-${d.id}`}>
+          <td>{d.matricule}</td>
+          <td>{d.nom_complet}</td>
+          <td>{formatDate(d.date_affectation_au_bureau)}</td>
+          <td>{d.nes || ''}</td>
+          <td>{d.situation_familiale || ''}</td>
+          <td>{d.premier_choix}</td>
+          <td>{d.periode1}</td>
+          <td>{d.deuxieme_choix}</td>
+          <td>{d.periode2}</td>
+          <td>{d.troisieme_choix}</td>
+          <td>{d.periode3}</td>
+          <td>{d.demande_type}</td>
+          <td>{d.statut}</td>
+          <td>
+            <button className="btn-delete" onClick={() => handleDelete(d.id)}>Supprimer</button>
+          </td>
+        </tr>
+      ))
+    )}
+  </tbody>
+</table>
 
-          {/* Pagination with clickable numbers */}
+
+          {/* Pagination */}
           <div style={{ marginTop: '20px', textAlign: 'center' }}>
             {[...Array(totalPages).keys()].map(n => {
               const pageNum = n + 1

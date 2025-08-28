@@ -1,11 +1,12 @@
+// db.js
 const { Pool } = require('pg');
-require('dotenv').config();
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  user: 'postgres',          // your PostgreSQL user
+  host: 'localhost',          // local DB
+  database: 'Marsa',          // the database you restored
+  password: '5432',           // your password
+  port: 5432                  // default PostgreSQL port
 });
 
 module.exports = pool;

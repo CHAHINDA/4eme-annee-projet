@@ -1,101 +1,67 @@
-import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function BeneficiairesList() {
-  const navigate = useNavigate()
-  const today = new Date().toLocaleDateString('fr-FR')
-  const [beneficiaries, setBeneficiaries] = useState([])
+  const navigate = useNavigate();
+  const today = new Date().toLocaleDateString('fr-FR');
+  const [beneficiaries, setBeneficiaries] = useState([]);
 
-function formatPeriod(start, end) {
-  if (!start || !end) return ''
-  try {
-    const options = { day: '2-digit', month: '2-digit', year: 'numeric' }
-    const s = new Date(start).toLocaleDateString('fr-FR', options)
-    const e = new Date(end).toLocaleDateString('fr-FR', options)
-    return `${s} - ${e}`
-  } catch {
-    return ''
+ 
+  // ✅ Format ISO date string into DD/MM/YYYY
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('fr-FR');
   }
-}
 
-useEffect(() => {
-  fetch('http://localhost:5000/api/demandes')
-    .then(res => res.json())
-    .then(data => {
-      console.log('API data:', data)
-
-      const filtered = data.filter(d => d.statut?.toLowerCase() === 'valide')
-      console.log('Filtered valid:', filtered)
-
-      const rows = []
-      filtered.forEach(d => {
-        if (d.premier_choix && d.periode1) {
-          rows.push({
-            mat: d.matricule,
-            nomPrenom: d.nom_complet,
-            centreAffecte: d.premier_choix,
-            periodeAffectee: d.periode1,
-          })
-        }
-        if (d.deuxieme_choix && d.periode2) {
-          rows.push({
-            mat: d.matricule,
-            nomPrenom: d.nom_complet,
-            centreAffecte: d.deuxieme_choix,
-            periodeAffectee: d.periode2,
-          })
-        }
-        if (d.troisieme_choix && d.periode3) {
-          rows.push({
-            mat: d.matricule,
-            nomPrenom: d.nom_complet,
-            centreAffecte: d.troisieme_choix,
-            periodeAffectee: d.periode3,
-          })
-        }
+  useEffect(() => {
+    fetch('http://localhost:5000/api/beneficiaires')
+      .then(res => res.json())
+      .then(data => {
+        const rows = data.map(d => ({
+          mat: d.matricule,
+          nomPrenom: d.nom_complet,
+          centreAffecte: d.centre_choisi,
+          // ✅ Show clean formatted range
+          periodeAffectee: `${formatDate(d.periode_debut)} - ${formatDate(d.periode_fin)}`
+        }));
+        setBeneficiaries(rows);
       })
+      .catch(err => {
+        console.error('Fetch error:', err);
+        setBeneficiaries([]);
+      });
+  }, []);
 
-      console.log('Final rows:', rows)
-      setBeneficiaries(rows)
-    })
-    .catch(err => {
-      console.error('Fetch error:', err)
-      setBeneficiaries([])
-    })
-}, [])
-
-
-
-
-  const handleRetour = () => navigate('/admin')
+  const handleRetour = () => navigate('/admin');
 
   const handleExportCSV = () => {
-    const headers = ['Mat', 'Nom et Prénom', 'Centre affecté', 'Période affectée']
-    const rows = beneficiaries.map(b => [b.mat, b.nomPrenom, b.centreAffecte, b.periodeAffectee])
+    const headers = ['Mat', 'Nom et Prénom', 'Centre affecté', 'Période affectée'];
+    const rows = beneficiaries.map(b => [b.mat, b.nomPrenom, b.centreAffecte, b.periodeAffectee]);
     const csvContent =
       '\uFEFF' +
-      [headers.join(';'), ...rows.map(row => row.map(f => `"${f}"`).join(';'))].join('\r\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', `beneficiaires_${today.replace(/\//g, '-')}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
+      [headers.join(';'), ...rows.map(row => row.map(f => `"${f}"`).join(';'))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `beneficiaires_${today.replace(/\//g, '-')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleExportPDF = () => {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-    const pageWidth = doc.internal.pageSize.getWidth()
-    doc.setFontSize(16)
-    doc.text('LISTE DE BENEFICIAIRES', pageWidth / 2, 15, { align: 'center' })
-    doc.setFontSize(12)
-    doc.text('Catégorie : Agent | Port : DEPL', pageWidth / 2, 22, { align: 'center' })
-    doc.setFontSize(10)
-    doc.text(`Date d'impression: ${today}`, 14, 30)
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    doc.setFontSize(16);
+    doc.text('LISTE DE BENEFICIAIRES', pageWidth / 2, 15, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text('Catégorie : Agent | Port : DEPL', pageWidth / 2, 22, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text(`Date d'impression: ${today}`, 14, 30);
 
     autoTable(doc, {
       startY: 35,
@@ -105,10 +71,11 @@ useEffect(() => {
       headStyles: { fillColor: [0, 122, 204], textColor: 255, halign: 'center' },
       bodyStyles: { halign: 'center' },
       margin: { top: 35, bottom: 20 },
-      theme: 'grid',
-    })
-    doc.save(`beneficiaires_${today.replace(/\//g, '-')}.pdf`)
-  }
+      theme: 'grid'
+    });
+
+    doc.save(`beneficiaires_${today.replace(/\//g, '-')}.pdf`);
+  };
 
   return (
     <>
@@ -246,57 +213,58 @@ useEffect(() => {
         }
       `}</style>
 
-      <div className="page-wrapper">
-        <div className="button-row">
-          <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
-          <button className="btn btn-csv" onClick={handleExportCSV}>Exporter CSV</button>
-          <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
-        </div>
+     <div className="page-wrapper">
+      <div className="button-row">
+        <button className="btn btn-pdf" onClick={handleExportPDF}>Exporter PDF</button>
+        <button className="btn btn-csv" onClick={handleExportCSV}>Exporter CSV</button>
+        <button className="btn btn-retour" onClick={handleRetour}>← Retour</button>
+      </div>
 
-        <div className="container">
-          <hr />
-          <h1>LISTE DE BENEFICIAIRES</h1>
-          <h2>Catégorie : Agent | Port : DEPL</h2>
-          <p style={{ textAlign: 'center', marginBottom: '16px', fontWeight: 600 }}>
-            Nombre de bénéficiaires : {beneficiaries.length}
-          </p>
-          <hr />
+      <div className="container">
+        <hr />
+        <h1>LISTE DE BENEFICIAIRES</h1>
+        <h2>Catégorie : Agent | Port : DEPL</h2>
+        <p style={{ textAlign: 'center', marginBottom: '16px', fontWeight: 600 }}>
+          Nombre de bénéficiaires : {beneficiaries.length}
+        </p>
+        <hr />
 
-          <table>
-            <thead>
+        <table>
+          <thead>
+            <tr>
+              <th>Mat</th>
+              <th>Nom et Prénom</th>
+              <th>Centre affecté</th>
+              <th>Période affectée</th>
+            </tr>
+          </thead>
+          <tbody>
+            {beneficiaries.length === 0 ? (
               <tr>
-                <th>Mat</th>
-                <th>Nom et Prénom</th>
-                <th>Centre affecté</th>
-                <th>Période affectée</th>
+                <td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
+                  Table vide
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {beneficiaries.length === 0 ? (
-                <tr>
-                  <td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
-                    Table vide
-                  </td>
+            ) : (
+              beneficiaries.map((b, idx) => (
+                <tr key={idx}>
+                  <td>{b.mat}</td>
+                  <td>{b.nomPrenom}</td>
+                  <td>{b.centreAffecte}</td>
+                  <td>{b.periodeAffectee}</td>
                 </tr>
-              ) : (
-                beneficiaries.map((b, idx) => (
-                  <tr key={idx}>
-                    <td>{b.mat}</td>
-                    <td>{b.nomPrenom}</td>
-                    <td>{b.centreAffecte}</td>
-                    <td>{b.periodeAffectee}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+              ))
+            )}
+          </tbody>
+        </table>
 
-          <div className="footer-bar">
-            <span>Date d'aujourd'hui : {today}</span>
-            <span>Page 1</span>
-          </div>
+        <div className="footer-bar">
+          <span>Date d'aujourd'hui : {today}</span>
+          <span>Page 1</span>
         </div>
       </div>
+    </div>
+
     </>
   )
 }

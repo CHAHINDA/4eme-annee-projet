@@ -15,26 +15,21 @@ export default function DemandeCentreVacances() {
 
   const [saved, setSaved] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
-
   const [formData, setFormData] = useState({
     nom_complet: '',
     matricule: '',
-    direction: 'LAAYOUNE', // fixed, readonly
+    direction: 'LAAYOUNE', // fixed
     date_affectation_au_bureau: '',
     role: '',
     situation_familiale: '',
     nombre_enfants_beneficiaires: '',
     telephone: '',
-    premierChoix: '',
-    deuxiemeChoix: '',
-    troisiemeChoix: '',
-    periodePremierDebut: '',
-    periodePremierFin: '',
-    periodeDeuxiemeDebut: '',
-    periodeDeuxiemeFin: '',
-    periodeTroisiemeDebut: '',
-    periodeTroisiemeFin: '',
-  })
+    choix: [
+      { choix_num: 1, centre_choisi: '', periode_debut: '', periode_fin: '' },
+      { choix_num: 2, centre_choisi: '', periode_debut: '', periode_fin: '' },
+      { choix_num: 3, centre_choisi: '', periode_debut: '', periode_fin: '' }
+    ]
+  });
 
   useEffect(() => {
     if (!matricule || matricule.trim() === '') {
@@ -68,6 +63,15 @@ export default function DemandeCentreVacances() {
         navigate('/home') // fallback on error
       })
   }, [matricule, navigate])
+  useEffect(() => {
+  if (type === 'campagne') {
+    setFormData(prev => ({ ...prev, demande_type: 'campagne' }));
+  } else {
+    setFormData(prev => ({ ...prev, demande_type: 'normal' }));
+  }
+}, [type]);
+
+
 
 
   // Use campaign.name if campaign exists, else 'Normal'
@@ -97,48 +101,43 @@ export default function DemandeCentreVacances() {
     alert('Form saved (frontend only)')
   }
 
-  const cloneAndPrepareForPdf = () => {
-    const original = formRef.current
-    if (!original) return null
+ const cloneAndPrepareForPdf = () => {
+  const original = formRef.current;
+  if (!original) return null;
 
-    const clone = original.cloneNode(true)
-    clone.style.position = 'fixed'
-    clone.style.top = '-9999px'
-    clone.style.left = '0'
-    clone.style.width = '300mm'
-    clone.style.minHeight = '297mm'
-    clone.style.padding = '0.5cm 0cm 5cm 0cm'
+  const clone = original.cloneNode(true);
+  clone.style.position = 'fixed';
+  clone.style.top = '-9999px';
+  clone.style.left = '0';
+  clone.style.width = '300mm';
+  clone.style.minHeight = '297mm';
+  clone.style.padding = '0.5cm 0cm 5cm 0cm';
 
-    // For Premier choix
-  const premierChoixSelect = clone.querySelector('select[name="premierChoix"]');
-  if (premierChoixSelect) premierChoixSelect.value = formData.premierChoix;
+  // Loop through each choice in formData.choix to fill select and date fields
+  formData.choix.forEach((choice, index) => {
+    const choixNum = index + 1;
 
-  // For Deuxieme choix
-  const deuxiemeChoixSelect = clone.querySelector('select[name="deuxiemeChoix"]');
-  if (deuxiemeChoixSelect) deuxiemeChoixSelect.value = formData.deuxiemeChoix;
+    // Centre choisi
+    const centreSelect = clone.querySelector(`select[name="choix${choixNum}Centre"]`);
+    if (centreSelect) centreSelect.value = choice.centre_choisi || '';
 
-  // For Troisieme choix
-  const troisiemeChoixSelect = clone.querySelector('select[name="troisiemeChoix"]');
-  if (troisiemeChoixSelect) troisiemeChoixSelect.value = formData.troisiemeChoix;
+    // Periode debut
+    const debutInput = clone.querySelector(`input[name="choix${choixNum}Debut"]`);
+    if (debutInput) debutInput.value = choice.periode_debut || '';
 
-  // For date inputs, set value attributes as well
-  const dateFields = [
-    'periodePremierDebut',
-    'periodePremierFin',
-    'periodeDeuxiemeDebut',
-    'periodeDeuxiemeFin',
-    'periodeTroisiemeDebut',
-    'periodeTroisiemeFin'
-  ];
-
-  dateFields.forEach(name => {
-    const input = clone.querySelector(`input[name="${name}"]`);
-    if (input) input.value = formData[name];
+    // Periode fin
+    const finInput = clone.querySelector(`input[name="choix${choixNum}Fin"]`);
+    if (finInput) finInput.value = choice.periode_fin || '';
   });
+
+  // Set demande_type if needed
+  const demandeTypeInput = clone.querySelector(`input[name="demandeType"]`);
+  if (demandeTypeInput) demandeTypeInput.value = formData.demande_type || '';
 
   document.body.appendChild(clone);
   return clone;
 };
+
 
 
   const handleImprimer = async () => {
@@ -250,38 +249,36 @@ export default function DemandeCentreVacances() {
 
     return false;
   };
-  const handleSave = async () => {
+ const handleSave = async () => {
   setIsPrinting(true); // optionally disable button while saving
 
-  const payload = {
-    matricule: formData.matricule,
-    premier_choix: formData.premierChoix,
-    deuxieme_choix: formData.deuxiemeChoix,
-    troisieme_choix: formData.troisiemeChoix,
-    periode_premier_debut: formData.periodePremierDebut,
-    periode_premier_fin: formData.periodePremierFin,
-    periode_deuxieme_debut: formData.periodeDeuxiemeDebut,
-    periode_deuxieme_fin: formData.periodeDeuxiemeFin,
-    periode_troisieme_debut: formData.periodeTroisiemeDebut,
-    periode_troisieme_fin: formData.periodeTroisiemeFin,
-    demande_type: type || '',  // you can adjust this if needed
-    statut: 'En attente',
-  };
-
   try {
-    const response = await fetch('http://localhost:5000/api/forms', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    // Loop through each choice and send it as a separate record
+    for (let i = 0; i < formData.choix.length; i++) {
+      const choice = formData.choix[i];
+      if (!choice.centre_choisi) continue; // skip empty choices
 
-    if (!response.ok) throw new Error('Erreur lors de l\'enregistrement');
+      const payload = {
+        matricule: formData.matricule,
+        choix_num: choice.choix_num,          // 1, 2, or 3
+        centre_choisi: choice.centre_choisi, 
+        periode_debut: choice.periode_debut,
+        periode_fin: choice.periode_fin,
+        demande_type: formData.demande_type || 'normal',
+        statut: 'En attente',
+      };
 
-    const data = await response.json();
+      const response = await fetch('http://localhost:5000/api/forms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) throw new Error(`Erreur lors de l'enregistrement du choix ${choice.choix_num}`);
+    }
+
     setSaved(true);
-    alert('Enregistrement réussi !');
+    alert('Enregistrement réussi pour toutes les périodes !');
   } catch (error) {
     console.error(error);
     alert('Erreur lors de l\'enregistrement.');
@@ -289,6 +286,14 @@ export default function DemandeCentreVacances() {
     setIsPrinting(false);
   }
 };
+const handleChoiceChange = (index, field, value) => {
+  setFormData(prev => {
+    const updatedChoix = [...prev.choix];
+    updatedChoix[index] = { ...updatedChoix[index], [field]: value, choix_num: index + 1 };
+    return { ...prev, choix: updatedChoix };
+  });
+};
+
 
 
   return (
@@ -740,7 +745,7 @@ export default function DemandeCentreVacances() {
           </div>
 
             {/* Box 2 with modified table */}
-  <table>
+ <table>
   <thead>
     <tr>
       <th>Choix du centre de vacances</th>
@@ -774,14 +779,15 @@ export default function DemandeCentreVacances() {
     </tr>
   </thead>
   <tbody>
+    {/* Row: Centres */}
     <tr>
       <td>Centre demandé</td>
       <td>
         <select
+          name="choix1Centre"
           required
-          name="premierChoix"
-          value={formData.premierChoix}
-          onChange={handleChange}
+          value={formData.choix[0].centre_choisi}
+          onChange={(e) => handleChoiceChange(0, 'centre_choisi', e.target.value)}
           className="table-input"
         >
           <option value="">-- Sélectionner --</option>
@@ -795,12 +801,13 @@ export default function DemandeCentreVacances() {
           <option value="CVS">CVS</option>
         </select>
       </td>
+
       {showSecondChoice && (
         <td>
           <select
-            name="deuxiemeChoix"
-            value={formData.deuxiemeChoix}
-            onChange={handleChange}
+            name="choix2Centre"
+            value={formData.choix[1].centre_choisi}
+            onChange={(e) => handleChoiceChange(1, 'centre_choisi', e.target.value)}
             className="table-input"
           >
             <option value="">-- Sélectionner --</option>
@@ -815,12 +822,13 @@ export default function DemandeCentreVacances() {
           </select>
         </td>
       )}
+
       {showThirdChoice && (
         <td>
           <select
-            name="troisiemeChoix"
-            value={formData.troisiemeChoix}
-            onChange={handleChange}
+            name="choix3Centre"
+            value={formData.choix[2].centre_choisi}
+            onChange={(e) => handleChoiceChange(2, 'centre_choisi', e.target.value)}
             className="table-input"
           >
             <option value="">-- Sélectionner --</option>
@@ -836,59 +844,63 @@ export default function DemandeCentreVacances() {
         </td>
       )}
     </tr>
+
+    {/* Row: Dates */}
     <tr>
       <td>Période demandée (date de sortie non incluse)</td>
       <td>
         <div className="date-range">
           <input
             type="date"
-            name="periodePremierDebut"
-            value={formData.periodePremierDebut}
-            onChange={handleChange}
+            name="choix1Debut"
+            value={formData.choix[0].periode_debut}
+            onChange={(e) => handleChoiceChange(0, 'periode_debut', e.target.value)}
           />
           <span>au</span>
           <input
             type="date"
-            name="periodePremierFin"
-            value={formData.periodePremierFin}
-            onChange={handleChange}
+            name="choix1Fin"
+            value={formData.choix[0].periode_fin}
+            onChange={(e) => handleChoiceChange(0, 'periode_fin', e.target.value)}
           />
         </div>
       </td>
+
       {showSecondChoice && (
         <td>
           <div className="date-range">
             <input
               type="date"
-              name="periodeDeuxiemeDebut"
-              value={formData.periodeDeuxiemeDebut}
-              onChange={handleChange}
+              name="choix2Debut"
+              value={formData.choix[1].periode_debut}
+              onChange={(e) => handleChoiceChange(1, 'periode_debut', e.target.value)}
             />
             <span>au</span>
             <input
               type="date"
-              name="periodeDeuxiemeFin"
-              value={formData.periodeDeuxiemeFin}
-              onChange={handleChange}
+              name="choix2Fin"
+              value={formData.choix[1].periode_fin}
+              onChange={(e) => handleChoiceChange(1, 'periode_fin', e.target.value)}
             />
           </div>
         </td>
       )}
+
       {showThirdChoice && (
         <td>
           <div className="date-range">
             <input
               type="date"
-              name="periodeTroisiemeDebut"
-              value={formData.periodeTroisiemeDebut}
-              onChange={handleChange}
+              name="choix3Debut"
+              value={formData.choix[2].periode_debut}
+              onChange={(e) => handleChoiceChange(2, 'periode_debut', e.target.value)}
             />
             <span>au</span>
             <input
               type="date"
-              name="periodeTroisiemeFin"
-              value={formData.periodeTroisiemeFin}
-              onChange={handleChange}
+              name="choix3Fin"
+              value={formData.choix[2].periode_fin}
+              onChange={(e) => handleChoiceChange(2, 'periode_fin', e.target.value)}
             />
           </div>
         </td>
